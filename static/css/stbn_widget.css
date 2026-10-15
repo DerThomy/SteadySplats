@@ -1,0 +1,109 @@
+/* Spatio-temporal blue noise widget (#temporal section). All rules are scoped to .stbn-widget. */
+
+.stbn-widget {
+    color: #0f172a;
+}
+
+.stbn-widget .stbn-panels {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.stbn-widget .stbn-panel {
+    margin: 0;
+    padding: 8px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+}
+
+.stbn-widget .stbn-ours {
+    border: 2px solid #21918c;
+    box-shadow: 0 2px 8px rgba(33, 145, 140, 0.15);
+}
+
+/* The 64x64 image, enlarged so single pixels stay visible */
+.stbn-widget canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 6px;
+    image-rendering: pixelated;
+}
+
+.stbn-widget figcaption {
+    margin-top: 6px;
+    text-align: center;
+    line-height: 1.3;
+}
+
+.stbn-widget .stbn-label {
+    display: block;
+    font-family: 'Jost', sans-serif;
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.stbn-widget .stbn-psnr {
+    display: block;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.8rem;
+    color: #64748b;
+}
+
+.stbn-widget .stbn-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 1rem;
+}
+
+.stbn-widget .stbn-frame-badge {
+    min-width: 11em;
+    margin-right: 8px;
+    padding: 3px 10px;
+    border-radius: 6px;
+    background: #0f172a;
+    color: #ffffff;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.85rem;
+    font-weight: 700;
+    text-align: center;
+}
+
+/* The label wraps together with its buttons */
+.stbn-widget .stbn-view-group {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.stbn-widget .stbn-view-label {
+    font-weight: 500;
+    margin-right: 4px;
+}
+
+@media screen and (max-width: 768px) {
+    .stbn-widget .stbn-panels {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+    }
+
+    .stbn-widget .stbn-label {
+        font-size: 0.85rem;
+    }
+
+    .stbn-widget .stbn-controls .button-17,
+    .stbn-widget .stbn-controls .button-17-selected {
+        height: 40px;
+        padding: 2px 14px;
+        font-size: 15px;
+    }
+}

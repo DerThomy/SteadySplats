@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Two overlapping Gaussian splats, as in the blue noise widget: orange in front of teal -->
+  <defs>
+    <radialGradient id="teal">
+      <stop offset="0" stop-color="#14b8a6"/>
+      <stop offset="0.45" stop-color="#14b8a6" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#14b8a6" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="orange">
+      <stop offset="0" stop-color="#f97316"/>
+      <stop offset="0.45" stop-color="#f97316" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#f97316" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#0f172a"/>
+  <ellipse cx="38" cy="37" rx="21" ry="25" transform="rotate(-20 38 37)" fill="url(#teal)"/>
+  <ellipse cx="26" cy="27" rx="23" ry="17" transform="rotate(30 26 27)" fill="url(#orange)"/>
+</svg>

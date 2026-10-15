@@ -1,0 +1,1214 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="description" content="Our stochastic 3D Gaussian Splatting renderer achieves significantly better image quality than prior art with the same number of random samples, making single-sample rendering viable at extremely high frame rates.">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SteadySplats: Resampling of Low-Variance Gaussians for High-Fidelity Stochastic Rendering</title>
+    <link rel="canonical" href="https://derthomy.github.io/SteadySplats/">
+
+    <!-- Link previews (social media, messengers); the image URL must be absolute -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://derthomy.github.io/SteadySplats/">
+    <meta property="og:title" content="SteadySplats: Resampling of Low-Variance Gaussians for High-Fidelity Stochastic Rendering">
+    <meta property="og:description" content="Our stochastic 3D Gaussian Splatting renderer achieves significantly better image quality than prior art with the same number of random samples, making single-sample rendering viable at extremely high frame rates.">
+    <meta property="og:image" content="https://derthomy.github.io/SteadySplats/static/images/preview.jpg">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="The Garden scene rendered with one sample per pixel by Gaussian Point Splatting, SteadySplats and StochasticSplats">
+    <meta name="twitter:card" content="summary_large_image">
+
+    <link rel="icon" href="./static/images/favicon.svg" type="image/svg+xml">
+    <link rel="icon" href="./static/images/favicon-32.png" sizes="32x32" type="image/png">
+    <link rel="apple-touch-icon" href="./static/images/apple-touch-icon.png">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin="">
+    <link href="https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500;600;700&amp;family=Noto+Sans&amp;display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="./static/css/bulma.min.css">
+    <link rel="stylesheet" href="./static/css/index.css">
+    <link rel="stylesheet" href="./static/css/dics.css">
+    <link rel="stylesheet" href="./static/css/variance_widget.css">
+    <link rel="stylesheet" href="./static/css/kbuffer_widget.css">
+    <link rel="stylesheet" href="./static/css/stbn_widget.css">
+
+    <!-- Deferred: they run after parsing, in this order. KaTeX for the formulas of the resampling section is loaded
+         by kbuffer_widget.js once that section approaches the viewport. -->
+    <script defer src="./static/js/dics.js"></script>
+    <script defer src="./static/js/index.js"></script>
+    <script defer src="./static/js/video_comparison.js"></script>
+    <script defer src="./static/js/variance_widget.js"></script>
+    <script defer src="./static/kbuffer/kbuffer_data.js"></script>
+    <script defer src="./static/js/kbuffer_widget.js"></script>
+    <script defer src="./static/js/stbn_widget.js"></script>
+</head>
+
+<body>
+
+    <!-- Icons: Font Awesome Free 5.15 (CC BY 4.0, https://fontawesome.com/license/free), used as <svg class="svg-icon"><use href="#icon-..."></use></svg> -->
+    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+<symbol id="icon-github" viewBox="0 0 496 512"><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></symbol>
+        <symbol id="icon-images" viewBox="0 0 576 512"><path d="M480 416v16c0 26.51-21.49 48-48 48H48c-26.51 0-48-21.49-48-48V176c0-26.51 21.49-48 48-48h16v48H54a6 6 0 0 0-6 6v244a6 6 0 0 0 6 6h372a6 6 0 0 0 6-6v-10h48zm42-336H150a6 6 0 0 0-6 6v244a6 6 0 0 0 6 6h372a6 6 0 0 0 6-6V86a6 6 0 0 0-6-6zm6-48c26.51 0 48 21.49 48 48v256c0 26.51-21.49 48-48 48H144c-26.51 0-48-21.49-48-48V80c0-26.51 21.49-48 48-48h384zM264 144c0 22.091-17.909 40-40 40s-40-17.909-40-40 17.909-40 40-40 40 17.909 40 40zm-72 96l39.515-39.515c4.686-4.686 12.284-4.686 16.971 0L288 240l103.515-103.515c4.686-4.686 12.284-4.686 16.971 0L480 208v80H192v-48z"/></symbol>
+        <symbol id="icon-arrow-right" viewBox="0 0 448 512"><path d="M190.5 66.9l22.2-22.2c9.4-9.4 24.6-9.4 33.9 0L441 239c9.4 9.4 9.4 24.6 0 33.9L246.6 467.3c-9.4 9.4-24.6 9.4-33.9 0l-22.2-22.2c-9.5-9.5-9.3-25 .4-34.3L311.4 296H24c-13.3 0-24-10.7-24-24v-32c0-13.3 10.7-24 24-24h287.4L190.9 101.2c-9.8-9.3-10-24.8-.4-34.3z"/></symbol>
+        <symbol id="icon-arrows-alt" viewBox="0 0 512 512"><path d="M352.201 425.775l-79.196 79.196c-9.373 9.373-24.568 9.373-33.941 0l-79.196-79.196c-15.119-15.119-4.411-40.971 16.971-40.97h51.162L228 284H127.196v51.162c0 21.382-25.851 32.09-40.971 16.971L7.029 272.937c-9.373-9.373-9.373-24.569 0-33.941L86.225 159.8c15.119-15.119 40.971-4.411 40.971 16.971V228H228V127.196h-51.23c-21.382 0-32.09-25.851-16.971-40.971l79.196-79.196c9.373-9.373 24.568-9.373 33.941 0l79.196 79.196c15.119 15.119 4.411 40.971-16.971 40.971h-51.162V228h100.804v-51.162c0-21.382 25.851-32.09 40.97-16.971l79.196 79.196c9.373 9.373 9.373 24.569 0 33.941L425.773 352.2c-15.119 15.119-40.971 4.411-40.97-16.971V284H284v100.804h51.23c21.382 0 32.09 25.851 16.971 40.971z"/></symbol>
+        <symbol id="icon-arrows-alt-h" viewBox="0 0 512 512"><path d="M377.941 169.941V216H134.059v-46.059c0-21.382-25.851-32.09-40.971-16.971L7.029 239.029c-9.373 9.373-9.373 24.568 0 33.941l86.059 86.059c15.119 15.119 40.971 4.411 40.971-16.971V296h243.882v46.059c0 21.382 25.851 32.09 40.971 16.971l86.059-86.059c9.373-9.373 9.373-24.568 0-33.941l-86.059-86.059c-15.119-15.12-40.971-4.412-40.971 16.97z"/></symbol>
+        <symbol id="icon-dice" viewBox="0 0 640 512"><path d="M592 192H473.26c12.69 29.59 7.12 65.2-17 89.32L320 417.58V464c0 26.51 21.49 48 48 48h224c26.51 0 48-21.49 48-48V240c0-26.51-21.49-48-48-48zM480 376c-13.25 0-24-10.75-24-24 0-13.26 10.75-24 24-24s24 10.74 24 24c0 13.25-10.75 24-24 24zm-46.37-186.7L258.7 14.37c-19.16-19.16-50.23-19.16-69.39 0L14.37 189.3c-19.16 19.16-19.16 50.23 0 69.39L189.3 433.63c19.16 19.16 50.23 19.16 69.39 0L433.63 258.7c19.16-19.17 19.16-50.24 0-69.4zM96 248c-13.25 0-24-10.75-24-24 0-13.26 10.75-24 24-24s24 10.74 24 24c0 13.25-10.75 24-24 24zm128 128c-13.25 0-24-10.75-24-24 0-13.26 10.75-24 24-24s24 10.74 24 24c0 13.25-10.75 24-24 24zm0-128c-13.25 0-24-10.75-24-24 0-13.26 10.75-24 24-24s24 10.74 24 24c0 13.25-10.75 24-24 24zm0-128c-13.25 0-24-10.75-24-24 0-13.26 10.75-24 24-24s24 10.74 24 24c0 13.25-10.75 24-24 24zm128 128c-13.25 0-24-10.75-24-24 0-13.26 10.75-24 24-24s24 10.74 24 24c0 13.25-10.75 24-24 24z"/></symbol>
+        <symbol id="icon-file-pdf" viewBox="0 0 384 512"><path d="M181.9 256.1c-5-16-4.9-46.9-2-46.9 8.4 0 7.6 36.9 2 46.9zm-1.7 47.2c-7.7 20.2-17.3 43.3-28.4 62.7 18.3-7 39-17.2 62.9-21.9-12.7-9.6-24.9-23.4-34.5-40.8zM86.1 428.1c0 .8 13.2-5.4 34.9-40.2-6.7 6.3-29.1 24.5-34.9 40.2zM248 160h136v328c0 13.3-10.7 24-24 24H24c-13.3 0-24-10.7-24-24V24C0 10.7 10.7 0 24 0h200v136c0 13.2 10.8 24 24 24zm-8 171.8c-20-12.2-33.3-29-42.7-53.8 4.5-18.5 11.6-46.6 6.2-64.2-4.7-29.4-42.4-26.5-47.8-6.8-5 18.3-.4 44.1 8.1 77-11.6 27.6-28.7 64.6-40.8 85.8-.1 0-.1.1-.2.1-27.1 13.9-73.6 44.5-54.5 68 5.6 6.9 16 10 21.5 10 17.9 0 35.7-18 61.1-61.8 25.8-8.5 54.1-19.1 79-23.2 21.7 11.8 47.1 19.5 64 19.5 29.2 0 31.2-32 19.7-43.4-13.9-13.6-54.3-9.7-73.6-7.2zM377 105L279 7c-4.5-4.5-10.6-7-17-7h-6v128h128v-6.1c0-6.3-2.5-12.4-7-16.9zm-74.1 255.3c4.1-2.7-2.5-11.9-42.8-9 37.1 15.8 42.8 9 42.8 9z"/></symbol>
+        <symbol id="icon-lightbulb" viewBox="0 0 352 512"><path d="M96.06 454.35c.01 6.29 1.87 12.45 5.36 17.69l17.09 25.69a31.99 31.99 0 0 0 26.64 14.28h61.71a31.99 31.99 0 0 0 26.64-14.28l17.09-25.69a31.989 31.989 0 0 0 5.36-17.69l.04-38.35H96.01l.05 38.35zM0 176c0 44.37 16.45 84.85 43.56 115.78 16.52 18.85 42.36 58.23 52.21 91.45.04.26.07.52.11.78h160.24c.04-.26.07-.51.11-.78 9.85-33.22 35.69-72.6 52.21-91.45C335.55 260.85 352 220.37 352 176 352 78.61 272.91-.3 175.45 0 73.44.31 0 82.97 0 176zm176-80c-44.11 0-80 35.89-80 80 0 8.84-7.16 16-16 16s-16-7.16-16-16c0-61.76 50.24-112 112-112 8.84 0 16 7.16 16 16s-7.16 16-16 16z"/></symbol>
+        <symbol id="icon-lock" viewBox="0 0 448 512"><path d="M400 224h-24v-72C376 68.2 307.8 0 224 0S72 68.2 72 152v72H48c-26.5 0-48 21.5-48 48v192c0 26.5 21.5 48 48 48h352c26.5 0 48-21.5 48-48V272c0-26.5-21.5-48-48-48zm-104 0H152v-72c0-39.7 32.3-72 72-72s72 32.3 72 72v72z"/></symbol>
+        <symbol id="icon-pause" viewBox="0 0 448 512"><path d="M144 479H48c-26.5 0-48-21.5-48-48V79c0-26.5 21.5-48 48-48h96c26.5 0 48 21.5 48 48v352c0 26.5-21.5 48-48 48zm304-48V79c0-26.5-21.5-48-48-48h-96c-26.5 0-48 21.5-48 48v352c0 26.5 21.5 48 48 48h96c26.5 0 48-21.5 48-48z"/></symbol>
+        <symbol id="icon-play" viewBox="0 0 448 512"><path d="M424.4 214.7L72.4 6.6C43.8-10.3 0 6.1 0 47.9V464c0 37.5 40.7 60.1 72.4 41.3l352-208c31.4-18.5 31.5-64.1 0-82.6z"/></symbol>
+        <symbol id="icon-step-backward" viewBox="0 0 448 512"><path d="M64 468V44c0-6.6 5.4-12 12-12h48c6.6 0 12 5.4 12 12v176.4l195.5-181C352.1 22.3 384 36.6 384 64v384c0 27.4-31.9 41.7-52.5 24.6L136 292.7V468c0 6.6-5.4 12-12 12H76c-6.6 0-12-5.4-12-12z"/></symbol>
+        <symbol id="icon-step-forward" viewBox="0 0 448 512"><path d="M384 44v424c0 6.6-5.4 12-12 12h-48c-6.6 0-12-5.4-12-12V291.6l-195.5 181C95.9 489.7 64 475.4 64 448V64c0-27.4 31.9-41.7 52.5-24.6L312 219.3V44c0-6.6 5.4-12 12-12h48c6.6 0 12 5.4 12 12z"/></symbol>
+    </svg>
+
+
+    <section class="hero">
+        <div class="hero-body">
+            <div class="container is-max-desktop">
+                <div class="columns is-centered">
+
+                    <div class="column has-text-centered">
+                        <h1 class="title is-1 publication-title" style="margin: 3px; padding: 2px;"><span
+                                style="font-weight: bold; margin: 0px;">SteadySplats: Resampling of Low-Variance Gaussians for High-Fidelity Stochastic Rendering</span>
+                        </h1>
+                        <div class="is-size-5 publication-authors mt-4">
+                            <span class="author-block"><a href="https://scholar.google.com/citations?user=J_Jm3Y4AAAAJ&amp;hl=en"><strong>Felix
+                                    Windisch</strong></a><sup>*1</sup></span> &emsp;
+                            <span class="author-block"><a href="https://scholar.google.com/citations?user=pMDepi0AAAAJ&amp;hl=en"><strong>Thomas
+                                    Köhler</strong></a><sup>*1</sup></span> &emsp;
+                            <span class="author-block"><a href="https://r4dl.github.io">Lukas Radl</a><sup>1</sup></span> &emsp;
+                            <span class="author-block"><a href="https://cwyman.org/">Chris Wyman</a><sup>2</sup></span> &emsp;
+                            <span class="author-block"><a href="https://grgkopanas.github.io/">Georgios Kopanas</a><sup>3</sup></span> &emsp;
+                            <span class="author-block"><a href="https://snosixtyboo.github.io/">Bernhard Kerbl</a><sup>4</sup></span> &emsp;
+                            <span class="author-block"><a href="https://www.markussteinberger.net/">Markus
+                                    Steinberger</a><sup>1</sup></span>
+                        </div>
+
+                        <div class="is-size-6 publication-authors">
+                            <span class="author-block"><sup>*</sup> Both authors contributed equally to this work</span>
+                        </div>
+                        <br>
+                        <div class="is-size-6 publication-authors">
+                            <span class="author-block"><sup>1</sup> Graz University of Technology</span> &emsp;
+                            <span class="author-block"><sup>2</sup> NVIDIA</span> &emsp;
+                            <span class="author-block"><sup>3</sup> Google DeepMind</span> &emsp;
+                            <span class="author-block"><sup>4</sup> University of Copenhagen</span>
+                        </div>
+
+                        <div class="column has-text-centered">
+                            <div class="publication-links">
+                                <!-- Paper Link. -->
+                                <span class="link-block">
+                                    <a href="https://arxiv.org/pdf/2610.05576"
+                                        class="external-link button is-normal is-rounded is-dark">
+                                        <span class="icon">
+                                            <svg class="svg-icon" viewBox="0 0 384 512" style="width: 0.75em;" aria-hidden="true"><use href="#icon-file-pdf"></use></svg>
+                                        </span>
+                                        <span>Paper</span>
+                                    </a>
+                                </span>
+                                <!-- Code Link (disabled until released). -->
+                                <span class="link-block">
+                                    <a class="external-link button is-normal is-rounded is-dark" disabled aria-disabled="true">
+                                        <span class="icon">
+                                            <svg class="svg-icon" viewBox="0 0 496 512" style="width: 0.9688em;" aria-hidden="true"><use href="#icon-github"></use></svg>
+                                        </span>
+                                        <span>Code<sup>&dagger;</sup></span>
+                                    </a>
+                                </span>
+                                <!-- Pre-Trained Models Link. -->
+                                <span class="link-block">
+                                    <a href="https://drive.google.com/drive/folders/1gJerJ0KndEokOlg0q5UAojTfrg-LAPoK?usp=sharing"
+                                        class="external-link button is-normal is-rounded is-dark">
+                                        <span class="icon">
+                                            <svg class="svg-icon" viewBox="0 0 576 512" style="width: 1.125em;" aria-hidden="true"><use href="#icon-images"></use></svg>
+                                        </span>
+                                        <span>Pre-Trained Models</span>
+                                    </a>
+                                </span>
+                            </div>
+                            <div class="is-size-6 publication-authors">
+                                <sup>&dagger;</sup> Code coming soon
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Landing video: paper Fig. 1 in motion (Garden, 1 sample per pixel, no temporal accumulation). -->
+    <section class="hero teaser">
+        <div class="container is-max-desktop">
+            <div class="hero-body">
+                <video id="teaser" autoplay muted loop playsinline width="1296" height="840"
+                    poster="./static/images/teaser_poster.jpg" style="width: 100%; height: auto;">
+                    <source src="./static/video/teaser.mp4" type="video/mp4">
+                </video>
+                <h2 class="subtitle has-text-centered">
+                    Through optimized training and inference, our stochastic renderer achieves significantly better
+                    image quality than prior art with the same number of random samples, making single-sample
+                    rendering viable for applications that demand high quality and extremely high frame rates.
+                </h2>
+            </div>
+        </div>
+    </section>
+
+    <!-- Video (removed for now). To embed a YouTube video below the landing video, add this section:
+    <section class="section">
+        <div class="container is-max-desktop">
+            <div class="columns is-centered has-text-centered">
+                <div class="column is-four-fifths">
+                    <h2 class="title is-3">Video</h2>
+                    <figure class="image is-16by9">
+                        <iframe class="has-ratio" width="100%" height="auto" src="https://www.youtube.com/embed/VIDEO_ID"
+                            title="YouTube video player" frameborder="0" allowfullscreen referrerpolicy="no-referrer-when-downgrade"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"></iframe>
+                    </figure>
+                </div>
+            </div>
+        </div>
+    </section>
+    -->
+
+    <!-- Method: color variance regularization (paper Sec. 4.1). -->
+    <section class="section" id="variance">
+        <div class="container is-max-desktop">
+            <div class="columns is-centered">
+                <div class="column is-full-width">
+
+                    <h2 class="title is-3">Color Variance Regularization</h2>
+                    <div class="content has-text-justified">
+                        <p>
+                            Stochastic rendering draws each Gaussian along a view ray with probability equal to its blending
+                            weight, so the noise of a single sample is the variance of the colors along that ray. Standard
+                            3DGS training, however, matches the ground truth by blending Gaussians of disparate colors. We
+                            therefore add a color variance term <span class="mathcal">L</span><sub>var</sub> to the training
+                            loss, which encourages all Gaussians that splat onto the same pixel to share the same color,
+                            without any change to the renderer.
+                        </p>
+                    </div>
+
+                    <!-- Interactive variance widget (static/js/variance_widget.js); scene data is loaded from static/variance/,
+                         packed by pack_variance_data.js (notes folder) from the files as delivered. -->
+                    <h3 class="title is-4 mt-6">Stochastic Splats Explorer</h3>
+                    <div class="content has-text-justified">
+                        <p>
+                            Each pixel shows the color of a single Gaussian, drawn with probability equal to its blending
+                            weight; a new sample is drawn every second. The left half shows a model trained without
+                            regularization (&lambda;<sub>var</sub> = 0), the right half one trained with
+                            &lambda;<sub>var</sub> = 2. Hover over or tap the image to inspect a pixel: the side panels show
+                            its color variance <span class="mathcal">L</span><sub>var</sub>, the probability of each
+                            Gaussian's color and the converged color. Click to lock a pixel, drag the divider to compare,
+                            and press Space to pause.
+                        </p>
+                    </div>
+                    <div class="variance-widget" id="variance-widget">
+                        <div class="scene-buttons has-text-centered">
+                            <span style="margin-right: 8px; font-weight: 500;">Scene:</span>
+                            <button class="button-17-selected" role="button" data-scene="stump">Stump</button>
+                            <button class="button-17" role="button" data-scene="bonsai">Bonsai</button>
+                            <button class="button-17" role="button" data-scene="garden">Garden</button>
+                            <button class="button-17" role="button" data-scene="kitchen">Kitchen</button>
+                        </div>
+
+                        <div class="variance-body">
+                            <div id="variance-loadingOverlay" class="loading-overlay">
+                                <div class="spinner"></div>
+                                <div style="font-size: 1.05rem; font-weight: 600; color: var(--text-primary);" id="variance-loadingText">Loading Distribution Data...</div>
+                            </div>
+
+                            <!-- Left distribution panel: model 0 (lambda_var = 0) -->
+                            <div class="distribution-panel">
+                                <div class="model-header">
+                                    <div class="model-variance" id="variance-m0_var_val"><span class="mathcal">L</span><sub>var</sub> = 0.4735</div>
+                                </div>
+                                <div class="bar-circle-column">
+                                    <div class="vertical-stacked-bar" id="variance-m0_stacked_bar" title="Model 1 Sample Distribution"></div>
+                                    <div class="converged-circle" id="variance-m0_mean_circle" title="Converged Color (&lambda;=0)"></div>
+                                </div>
+                            </div>
+
+                            <!-- Center: split image viewer -->
+                            <div class="canvas-card">
+                                <div class="canvas-wrapper" id="variance-canvasWrapper">
+                                    <canvas id="variance-imageCanvas" width="622" height="412"></canvas>
+                                    <canvas id="variance-overlayCanvas" width="622" height="412"></canvas>
+                                    <div class="split-label-left">&lambda;<sub>var</sub> = 0</div>
+                                    <div class="split-label-right">&lambda;<sub>var</sub> = 2</div>
+                                    <div class="pause-badge" id="variance-pauseBadge">Paused</div>
+                                    <div class="lock-badge" id="variance-lockBadge"><svg class="svg-icon" viewBox="0 0 448 512" style="width: 0.875em;" aria-hidden="true"><use href="#icon-lock"></use></svg> Locked</div>
+
+                                    <!-- Floating magnified loupe view (appears on hover, top-left of mouse) -->
+                                    <div class="floating-loupe" id="variance-floatingLoupe">
+                                        <canvas id="variance-loupeCanvas" width="21" height="21"></canvas>
+                                        <div class="loupe-crosshair"></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Right distribution panel: model 1 (lambda_var = 2) -->
+                            <div class="distribution-panel">
+                                <div class="model-header">
+                                    <div class="model-variance" id="variance-m1_var_val"><span class="mathcal">L</span><sub>var</sub> = 0.0045</div>
+                                </div>
+                                <div class="bar-circle-column">
+                                    <div class="vertical-stacked-bar" id="variance-m1_stacked_bar" title="Model 2 Sample Distribution"></div>
+                                    <div class="converged-circle" id="variance-m1_mean_circle" title="Converged Color (&lambda;=2)"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="variance-tooltip"></div>
+                    </div>
+
+                    <!-- Sliders (same view): stochastic at 1 spp (left) and sorted alpha-blending (right), each lambda_var = 0 vs. 1.
+                         Each .b-dics slider compares its images; the alt texts are the labels. -->
+                    <div class="content has-text-justified mt-6">
+                        <p>
+                            Rendered stochastically with one sample per pixel, the regularized model is far less noisy
+                            (left), while its quality with sorted &alpha;-blending is nearly unchanged (right).
+                        </p>
+                    </div>
+                    <div class="columns is-centered">
+                        <div class="column">
+                            <div class="b-dics">
+                                <img src="static/jpg/variance/bicycle_1spp_lvar0.jpg" loading="lazy" alt="λvar = 0">
+                                <img src="static/jpg/variance/bicycle_1spp_lvar1.jpg" loading="lazy" alt="λvar = 1">
+                            </div>
+                            <p class="caption">Stochastic, 1 sample per pixel</p>
+                        </div>
+                        <div class="column">
+                            <div class="b-dics">
+                                <img src="static/jpg/variance/bicycle_sorted_lvar0.jpg" loading="lazy" alt="λvar = 0">
+                                <img src="static/jpg/variance/bicycle_sorted_lvar1.jpg" loading="lazy" alt="λvar = 1">
+                            </div>
+                            <p class="caption">Sorted &alpha;-blending</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Method: history-based spatial resampling (paper Sec. 4.2). The interactive parts (static/js/kbuffer_widget.js,
+         static/css/kbuffer_widget.css) load their data from static/kbuffer/, which build_kbuffer_data.js (notes folder)
+         generates from the widget export. Formulas in this section are typeset with KaTeX. -->
+    <section class="section" id="reuse">
+        <div class="container is-max-desktop">
+            <div class="columns is-centered">
+                <div class="column is-full-width">
+
+                    <h2 class="title is-3">History-Based Spatial Resampling</h2>
+                    <div class="content has-text-justified">
+                        <p>
+                            Neighboring pixels see similar color distributions, so each sample can also serve its neighbors.
+                            Plain averaging blurs the image; instead, we weight every reused sample by how likely it is at
+                            the target pixel relative to its source pixel, which keeps the introduced bias minimal. The
+                            occlusion part of these weights would normally require sorting. Since a model trained with
+                            <span class="mathcal">L</span><sub>var</sub> has very few relevant occluders per pixel, we
+                            approximate it from a small buffer of the <i>K</i> most recent samples at each pixel.
+                        </p>
+                    </div>
+
+                    <!-- Toy example: two pixels with overlapping color distributions (drawn anew on each click). -->
+                    <h3 class="title is-4 mt-6">Why Spatial Resampling Works</h3>
+                    <div class="content has-text-justified">
+                        <p>
+                            Two neighboring pixels A and B usually see similar, but not identical color distributions
+                            <span class="nowrap">(\(p_A \approx p_B\))</span>. With one sample per pixel, both are noisy. With resampling, each pixel
+                            also reuses its neighbor's sample, weighted by how likely that sample is at the pixel compared
+                            to the neighbor <span class="nowrap">(\(w_{B \rightarrow A} = p_A(s_B) / p_B(s_B)\))</span>. Each pixel thus averages two
+                            samples instead of one, while samples that are unlikely at the pixel, e.g. from across an
+                            edge, get low weights and do not blur it.
+                        </p>
+                    </div>
+                    <div class="kbuffer-widget kbuffer-toy" id="kbuffer-toy">
+                        <div class="toy-grid">
+                            <div class="toy-group">
+                                <div class="toy-group-header">
+                                    <span class="toy-group-title">Color Distributions</span>
+                                    <span class="toy-group-badge badge-truth">Reference</span>
+                                </div>
+                                <div class="toy-reference-layout">
+                                    <div class="toy-dist-pane">
+                                        <span class="toy-dist-label" style="color: #2563eb;">\(p_A(c)\)</span>
+                                        <svg id="kbuffer-toyDistA" class="toy-dist-svg" viewBox="0 0 130 65"></svg>
+                                    </div>
+                                    <div class="toy-pixels-wrapper">
+                                        <div class="toy-pixel-pair">
+                                            <div class="toy-pixel" id="kbuffer-toyTrueA"><span class="toy-pixel-tag">A</span></div>
+                                            <div class="toy-pixel" id="kbuffer-toyTrueB"><span class="toy-pixel-tag">B</span></div>
+                                        </div>
+                                        <span class="toy-pixels-caption">Means \(\mu_A, \mu_B\)</span>
+                                    </div>
+                                    <div class="toy-dist-pane">
+                                        <span class="toy-dist-label" style="color: #059669;">\(p_B(c)\)</span>
+                                        <svg id="kbuffer-toyDistB" class="toy-dist-svg" viewBox="0 0 130 65"></svg>
+                                    </div>
+                                </div>
+                                <div class="toy-metric-bar">
+                                    <span class="toy-metric-label">Error:</span>
+                                    <span class="toy-metric-val" style="color: #64748b;">0.0</span>
+                                </div>
+                            </div>
+
+                            <div class="toy-group">
+                                <div class="toy-group-header">
+                                    <span class="toy-group-title">One Sample per Pixel</span>
+                                    <span class="toy-group-badge badge-raw">No Resampling</span>
+                                </div>
+                                <div class="toy-sample-layout">
+                                    <div class="toy-pixels-wrapper">
+                                        <div class="toy-pixel-pair">
+                                            <div class="toy-pixel" id="kbuffer-toyRawA"><span class="toy-pixel-tag">A</span></div>
+                                            <div class="toy-pixel" id="kbuffer-toyRawB"><span class="toy-pixel-tag">B</span></div>
+                                        </div>
+                                        <span class="toy-pixels-caption">Samples \(s_A, s_B\)</span>
+                                    </div>
+                                </div>
+                                <div class="toy-metric-bar">
+                                    <span class="toy-metric-label">Mean error:</span>
+                                    <span class="toy-metric-val" id="kbuffer-toyErrorRaw" style="color: #dc2626;">--</span>
+                                </div>
+                            </div>
+
+                            <div class="toy-group">
+                                <div class="toy-group-header">
+                                    <span class="toy-group-title">Resampling Weights</span>
+                                    <span class="toy-group-badge badge-weights">Likelihood Ratio</span>
+                                </div>
+                                <div class="toy-weights-layout">
+                                    <div class="toy-weight-row">
+                                        <span class="toy-weight-formula">\(w_{B \rightarrow A} = \frac{p_A(s_B)}{p_B(s_B)}\)</span>
+                                        <span class="toy-weight-eq">=</span>
+                                        <span class="toy-weight-val kb-mono" id="kbuffer-toyWeightBA">--</span>
+                                    </div>
+                                    <div class="toy-weight-row">
+                                        <span class="toy-weight-formula">\(w_{A \rightarrow B} = \frac{p_B(s_A)}{p_A(s_A)}\)</span>
+                                        <span class="toy-weight-eq">=</span>
+                                        <span class="toy-weight-val kb-mono" id="kbuffer-toyWeightAB">--</span>
+                                    </div>
+                                </div>
+                                <div class="toy-metric-bar">
+                                    <span class="toy-metric-label">Likelihood ratio:</span>
+                                    <span class="toy-metric-val" style="color: #2563eb;">\(p_{\text{target}} / p_{\text{source}}\)</span>
+                                </div>
+                            </div>
+
+                            <div class="toy-group">
+                                <div class="toy-group-header">
+                                    <span class="toy-group-title">Spatially Resampled</span>
+                                    <span class="toy-group-badge badge-ours">Own + Reused Sample</span>
+                                </div>
+                                <div class="toy-sample-layout">
+                                    <div class="toy-pixels-wrapper">
+                                        <div class="toy-pixel-pair">
+                                            <div class="toy-pixel" id="kbuffer-toyResA"><span class="toy-pixel-tag">A</span></div>
+                                            <div class="toy-pixel" id="kbuffer-toyResB"><span class="toy-pixel-tag">B</span></div>
+                                        </div>
+                                        <span class="toy-pixels-caption">Weighted means \(c_A^{\text{res}}, c_B^{\text{res}}\)</span>
+                                    </div>
+                                </div>
+                                <div class="toy-metric-bar highlight-resampled">
+                                    <span class="toy-metric-label">Mean error:</span>
+                                    <span>
+                                        <span class="toy-metric-val" id="kbuffer-toyErrorRes" style="color: #059669;">--</span>
+                                        <span class="toy-reduction-badge" id="kbuffer-toyReduction">--</span>
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="toy-actions">
+                            <button class="button-17" role="button" id="kbuffer-toyRegenerate">
+                                <span class="icon is-small mr-2"><svg class="svg-icon" viewBox="0 0 640 512" style="width: 1.25em;" aria-hidden="true"><use href="#icon-dice"></use></svg></span>Draw New Samples
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- K-buffer explorer: Garden at 1 spp over 32 frames. data-pixel and data-frame set the pixel and
+                         frame shown first (here, the K-buffer is full and the pixel has 3 occluders). -->
+                    <h3 class="title is-4 mt-6">Spatial Resampling Explorer</h3>
+                    <div class="content has-text-justified">
+                        <p>
+                            Garden rendered stochastically with one sample per pixel over 32 frames. Hover over or tap
+                            the image to inspect a pixel: the panels show the sample it draws in the current frame, the
+                            <i>K</i>&nbsp;=&nbsp;4 past samples in its K-buffer, and how both set the weights with which
+                            its 4 neighbors reuse the sample. Click to lock a pixel, step through the frames with the
+                            slider or the arrow keys, and press Space to play.
+                        </p>
+                    </div>
+                    <div class="kbuffer-widget kbuffer-explorer" id="kbuffer-explorer" data-pixel="300,200" data-frame="4">
+                        <div class="explorer-top">
+                            <div class="widget-card image-card">
+                                <div class="canvas-wrapper" id="kbuffer-canvasWrapper">
+                                    <canvas id="kbuffer-imageCanvas" width="648" height="420"></canvas>
+                                    <canvas id="kbuffer-overlayCanvas" width="648" height="420"></canvas>
+                                    <div class="image-loading" id="kbuffer-imageLoading">Loading...</div>
+                                    <div class="lock-badge" id="kbuffer-lockBadge"><svg class="svg-icon" viewBox="0 0 448 512" style="width: 0.875em;" aria-hidden="true"><use href="#icon-lock"></use></svg> Locked</div>
+                                    <div class="floating-loupe" id="kbuffer-loupe">
+                                        <canvas class="loupe-canvas" id="kbuffer-loupeCanvas"></canvas>
+                                        <div class="loupe-crosshair"></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 3x3 neighborhood: weights out of the pixel (toward each neighbor) and into it, and the colors
+                                 before and after resampling -->
+                            <div class="widget-card neighborhood-card data-panel">
+                                <div class="card-title">Spatial Resampling Neighborhood</div>
+                                <div class="neighborhood-container">
+                                    <div class="nh-panel">
+                                        <span class="nh-title">Sampled Colors</span>
+                                        <svg viewBox="0 0 240 240" class="nh-svg">
+                                            <defs>
+                                                <!-- One arrowhead per arrow, colored like its line -->
+                                                <marker id="kbuffer-nhMarkerInTop" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path id="kbuffer-nhMarkerPathInTop" d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#21918c" /></marker>
+                                                <marker id="kbuffer-nhMarkerOutTop" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path id="kbuffer-nhMarkerPathOutTop" d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#21918c" /></marker>
+                                                <marker id="kbuffer-nhMarkerInBottom" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path id="kbuffer-nhMarkerPathInBottom" d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#21918c" /></marker>
+                                                <marker id="kbuffer-nhMarkerOutBottom" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path id="kbuffer-nhMarkerPathOutBottom" d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#21918c" /></marker>
+                                                <marker id="kbuffer-nhMarkerInLeft" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path id="kbuffer-nhMarkerPathInLeft" d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#21918c" /></marker>
+                                                <marker id="kbuffer-nhMarkerOutLeft" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path id="kbuffer-nhMarkerPathOutLeft" d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#21918c" /></marker>
+                                                <marker id="kbuffer-nhMarkerInRight" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path id="kbuffer-nhMarkerPathInRight" d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#21918c" /></marker>
+                                                <marker id="kbuffer-nhMarkerOutRight" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path id="kbuffer-nhMarkerPathOutRight" d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#21918c" /></marker>
+                                                <filter id="kbuffer-badgeShadow" x="-20%" y="-20%" width="140%" height="140%">
+                                                    <feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-color="#000000" flood-opacity="0.3" />
+                                                </filter>
+                                            </defs>
+                                            <rect id="kbuffer-nhSampledTop" x="88" y="24" width="64" height="64" fill="#000000" stroke="#334155" stroke-width="1.5" />
+                                            <rect id="kbuffer-nhSampledLeft" x="24" y="88" width="64" height="64" fill="#000000" stroke="#334155" stroke-width="1.5" />
+                                            <rect id="kbuffer-nhSampledCenter" x="88" y="88" width="64" height="64" fill="#000000" stroke="#000000" stroke-width="2.5" />
+                                            <rect id="kbuffer-nhSampledRight" x="152" y="88" width="64" height="64" fill="#000000" stroke="#334155" stroke-width="1.5" />
+                                            <rect id="kbuffer-nhSampledBottom" x="88" y="152" width="64" height="64" fill="#000000" stroke="#334155" stroke-width="1.5" />
+                                            <!-- Pairs of arrows across each pixel border: into the center and out of it -->
+                                            <g class="nh-arrow-item">
+                                                <title id="kbuffer-nhTitleInTop"></title>
+                                                <line class="nh-arrow-hitbox" x1="112" y1="38" x2="112" y2="104" />
+                                                <line id="kbuffer-nhLineInTop" class="nh-arrow-line" x1="112" y1="38" x2="112" y2="104" stroke="#21918c" stroke-width="2.2" marker-end="url(#kbuffer-nhMarkerInTop)" />
+                                                <g class="nh-arrow-badge" transform="translate(112, 71)"><rect x="-19" y="-9" width="38" height="18" rx="3" filter="url(#kbuffer-badgeShadow)" /><text id="kbuffer-nhWeightInTop" y="4" text-anchor="middle" class="kb-mono">0.000</text></g>
+                                            </g>
+                                            <g class="nh-arrow-item">
+                                                <title id="kbuffer-nhTitleOutTop"></title>
+                                                <line class="nh-arrow-hitbox" x1="128" y1="104" x2="128" y2="38" />
+                                                <line id="kbuffer-nhLineOutTop" class="nh-arrow-line" x1="128" y1="104" x2="128" y2="38" stroke="#21918c" stroke-width="2.2" marker-end="url(#kbuffer-nhMarkerOutTop)" />
+                                                <g class="nh-arrow-badge" transform="translate(128, 71)"><rect x="-19" y="-9" width="38" height="18" rx="3" filter="url(#kbuffer-badgeShadow)" /><text id="kbuffer-nhWeightOutTop" y="4" text-anchor="middle" class="kb-mono">0.000</text></g>
+                                            </g>
+                                            <g class="nh-arrow-item">
+                                                <title id="kbuffer-nhTitleOutBottom"></title>
+                                                <line class="nh-arrow-hitbox" x1="112" y1="136" x2="112" y2="202" />
+                                                <line id="kbuffer-nhLineOutBottom" class="nh-arrow-line" x1="112" y1="136" x2="112" y2="202" stroke="#21918c" stroke-width="2.2" marker-end="url(#kbuffer-nhMarkerOutBottom)" />
+                                                <g class="nh-arrow-badge" transform="translate(112, 169)"><rect x="-19" y="-9" width="38" height="18" rx="3" filter="url(#kbuffer-badgeShadow)" /><text id="kbuffer-nhWeightOutBottom" y="4" text-anchor="middle" class="kb-mono">0.000</text></g>
+                                            </g>
+                                            <g class="nh-arrow-item">
+                                                <title id="kbuffer-nhTitleInBottom"></title>
+                                                <line class="nh-arrow-hitbox" x1="128" y1="202" x2="128" y2="136" />
+                                                <line id="kbuffer-nhLineInBottom" class="nh-arrow-line" x1="128" y1="202" x2="128" y2="136" stroke="#21918c" stroke-width="2.2" marker-end="url(#kbuffer-nhMarkerInBottom)" />
+                                                <g class="nh-arrow-badge" transform="translate(128, 169)"><rect x="-19" y="-9" width="38" height="18" rx="3" filter="url(#kbuffer-badgeShadow)" /><text id="kbuffer-nhWeightInBottom" y="4" text-anchor="middle" class="kb-mono">0.000</text></g>
+                                            </g>
+                                            <g class="nh-arrow-item">
+                                                <title id="kbuffer-nhTitleOutLeft"></title>
+                                                <line class="nh-arrow-hitbox" x1="104" y1="112" x2="38" y2="112" />
+                                                <line id="kbuffer-nhLineOutLeft" class="nh-arrow-line" x1="104" y1="112" x2="38" y2="112" stroke="#21918c" stroke-width="2.2" marker-end="url(#kbuffer-nhMarkerOutLeft)" />
+                                                <g class="nh-arrow-badge" transform="translate(71, 112)"><rect x="-19" y="-9" width="38" height="18" rx="3" filter="url(#kbuffer-badgeShadow)" /><text id="kbuffer-nhWeightOutLeft" y="4" text-anchor="middle" class="kb-mono">0.000</text></g>
+                                            </g>
+                                            <g class="nh-arrow-item">
+                                                <title id="kbuffer-nhTitleInLeft"></title>
+                                                <line class="nh-arrow-hitbox" x1="38" y1="128" x2="104" y2="128" />
+                                                <line id="kbuffer-nhLineInLeft" class="nh-arrow-line" x1="38" y1="128" x2="104" y2="128" stroke="#21918c" stroke-width="2.2" marker-end="url(#kbuffer-nhMarkerInLeft)" />
+                                                <g class="nh-arrow-badge" transform="translate(71, 128)"><rect x="-19" y="-9" width="38" height="18" rx="3" filter="url(#kbuffer-badgeShadow)" /><text id="kbuffer-nhWeightInLeft" y="4" text-anchor="middle" class="kb-mono">0.000</text></g>
+                                            </g>
+                                            <g class="nh-arrow-item">
+                                                <title id="kbuffer-nhTitleOutRight"></title>
+                                                <line class="nh-arrow-hitbox" x1="136" y1="112" x2="202" y2="112" />
+                                                <line id="kbuffer-nhLineOutRight" class="nh-arrow-line" x1="136" y1="112" x2="202" y2="112" stroke="#21918c" stroke-width="2.2" marker-end="url(#kbuffer-nhMarkerOutRight)" />
+                                                <g class="nh-arrow-badge" transform="translate(169, 112)"><rect x="-19" y="-9" width="38" height="18" rx="3" filter="url(#kbuffer-badgeShadow)" /><text id="kbuffer-nhWeightOutRight" y="4" text-anchor="middle" class="kb-mono">0.000</text></g>
+                                            </g>
+                                            <g class="nh-arrow-item">
+                                                <title id="kbuffer-nhTitleInRight"></title>
+                                                <line class="nh-arrow-hitbox" x1="202" y1="128" x2="136" y2="128" />
+                                                <line id="kbuffer-nhLineInRight" class="nh-arrow-line" x1="202" y1="128" x2="136" y2="128" stroke="#21918c" stroke-width="2.2" marker-end="url(#kbuffer-nhMarkerInRight)" />
+                                                <g class="nh-arrow-badge" transform="translate(169, 128)"><rect x="-19" y="-9" width="38" height="18" rx="3" filter="url(#kbuffer-badgeShadow)" /><text id="kbuffer-nhWeightInRight" y="4" text-anchor="middle" class="kb-mono">0.000</text></g>
+                                            </g>
+                                        </svg>
+                                    </div>
+                                    <div class="nh-transition">
+                                        <svg class="svg-icon" viewBox="0 0 448 512" style="width: 0.875em;" aria-hidden="true"><use href="#icon-arrow-right"></use></svg>
+                                        <span class="nh-transition-caption">Spatial<br> Reuse</span>
+                                    </div>
+                                    <div class="nh-panel">
+                                        <span class="nh-title">Resampled Colors</span>
+                                        <svg viewBox="0 0 240 240" class="nh-svg">
+                                            <rect id="kbuffer-nhResampledTop" x="88" y="24" width="64" height="64" fill="#000000" stroke="#334155" stroke-width="1.5" />
+                                            <rect id="kbuffer-nhResampledLeft" x="24" y="88" width="64" height="64" fill="#000000" stroke="#334155" stroke-width="1.5" />
+                                            <rect id="kbuffer-nhResampledCenter" x="88" y="88" width="64" height="64" fill="#000000" stroke="#000000" stroke-width="2.5" />
+                                            <rect id="kbuffer-nhResampledRight" x="152" y="88" width="64" height="64" fill="#000000" stroke="#334155" stroke-width="1.5" />
+                                            <rect id="kbuffer-nhResampledBottom" x="88" y="152" width="64" height="64" fill="#000000" stroke="#334155" stroke-width="1.5" />
+                                        </svg>
+                                    </div>
+                                </div>
+                                <div class="nh-formula">
+                                    \(\hat{C}_{x,y} = \frac{\sum_n w_{n \rightarrow x,y} \, c_n}{\sum_n w_{n \rightarrow x,y}}\)
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Frames and view -->
+                        <div class="widget-card controls-card">
+                            <div class="playback-row">
+                                <button class="button is-small is-dark" id="kbuffer-playBtn" title="Play"><svg class="svg-icon" viewBox="0 0 448 512" style="width: 0.875em;" aria-hidden="true"><use href="#icon-play"></use></svg></button>
+                                <button class="button is-small is-light" id="kbuffer-prevFrameBtn" title="Previous frame"><svg class="svg-icon" viewBox="0 0 448 512" style="width: 0.875em;" aria-hidden="true"><use href="#icon-step-backward"></use></svg></button>
+                                <input type="range" class="frame-slider" id="kbuffer-frameSlider" min="0" max="31" value="0" step="1" aria-label="Frame">
+                                <button class="button is-small is-light" id="kbuffer-nextFrameBtn" title="Next frame"><svg class="svg-icon" viewBox="0 0 448 512" style="width: 0.875em;" aria-hidden="true"><use href="#icon-step-forward"></use></svg></button>
+                                <span class="frame-badge" id="kbuffer-frameBadge">Frame 1 / 32</span>
+                            </div>
+                            <div class="view-row">
+                                <span class="row-label">View:</span>
+                                <button class="button-17-selected" role="button" data-view="converged">Cumulative Mean</button>
+                                <button class="button-17" role="button" data-view="sample">Current Sample</button>
+                                <button class="button-17" role="button" data-view="resampled">Resampled Frame</button>
+                                <span class="badge-group">
+                                    <span class="metrics-badge" id="kbuffer-slotBadge">Insert slot: #0</span>
+                                    <span class="metrics-badge" id="kbuffer-psnrBadge">PSNR: --</span>
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- Computation for the inspected pixel: relative opacity (row 1) times the occlusion factors of the
+                             K-buffer slots in front of the sample (row 2) gives the resampling weights (row 3) -->
+                        <div class="widget-card compute-card data-panel">
+                            <div class="pixel-status" id="kbuffer-pixelStatus"></div>
+                            <div class="compute-row">
+                                <div class="row-side-label label-new-sample"><span>New Sample</span></div>
+                                <div class="row-upstream">
+                                    <div class="intuition-banner">
+                                        <svg class="svg-icon" viewBox="0 0 352 512" style="width: 0.6875em;" aria-hidden="true"><use href="#icon-lightbulb"></use></svg>
+                                        <span>How much more or less opaque is the sampled Gaussian at the neighboring pixels?</span>
+                                    </div>
+                                    <div class="upstream-flow">
+                                        <div class="sample-card">
+                                            <div class="swatch-row">
+                                                <div class="color-swatch" id="kbuffer-sampleSwatch"></div>
+                                                <div class="swatch-info">
+                                                    <span class="summary-label">Sample \(c_r\)</span>
+                                                    <span class="swatch-rgb kb-mono" id="kbuffer-sampleRgb">RGB(---)</span>
+                                                </div>
+                                            </div>
+                                            <div class="meta-item"><span class="summary-label">Depth \(z_r\):</span> <span class="tag is-light kb-mono" id="kbuffer-sampleDepth">---</span></div>
+                                            <div class="meta-item"><span class="summary-label">Gaussian ID:</span> <span class="tag is-info is-light kb-mono" id="kbuffer-sampleId">---</span></div>
+                                            <div class="meta-item"><span class="summary-label">Opacity \(\alpha_{x,y}\):</span> <span class="tag is-dark is-light kb-mono" id="kbuffer-sampleAlpha">---</span></div>
+                                        </div>
+                                        <div class="sample-eval-note">
+                                            <div class="eval-note-title">Neighbor Sampling</div>
+                                            <p>
+                                                The projected 2D Gaussian is also sampled for each neighbor pixel, as the likelihood of it being sampled there is proportional to its \(\alpha\).
+                                            </p>
+                                        </div>
+                                        <div class="flow-group">
+                                            <div class="compute-box">
+                                                <div class="compute-box-sub">\(\alpha_n\)</div>
+                                                <div class="directional-cross raw-alpha-cross">
+                                                    <canvas class="gaussian-canvas" id="kbuffer-gaussianCanvas" width="120" height="120"></canvas>
+                                                    <div class="cross-cell empty"></div>
+                                                    <div class="cross-cell" id="kbuffer-rawAlphaTop" title="Opacity at the top neighbor">---</div>
+                                                    <div class="cross-cell empty"></div>
+                                                    <div class="cross-cell" id="kbuffer-rawAlphaLeft" title="Opacity at the left neighbor">---</div>
+                                                    <div class="cross-cell" id="kbuffer-rawAlphaSelf" title="Opacity at the pixel">---</div>
+                                                    <div class="cross-cell" id="kbuffer-rawAlphaRight" title="Opacity at the right neighbor">---</div>
+                                                    <div class="cross-cell empty"></div>
+                                                    <div class="cross-cell" id="kbuffer-rawAlphaBottom" title="Opacity at the bottom neighbor">---</div>
+                                                    <div class="cross-cell empty"></div>
+                                                </div>
+                                            </div>
+                                            <div class="math-operator">&divide;</div>
+                                            <div class="compute-box">
+                                                <div class="compute-box-sub">\(\alpha_{x,y}\)</div>
+                                                <div class="cross-cell divisor-cell" id="kbuffer-divisorAlpha" title="Opacity at the pixel">---</div>
+                                            </div>
+                                            <div class="math-operator">=</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row-result">
+                                    <div class="result-box">
+                                        <div class="compute-box-sub">\(\alpha_n / \alpha_{x,y}\)</div>
+                                        <div class="directional-cross">
+                                            <div class="cross-cell empty"></div>
+                                            <div class="cross-cell" id="kbuffer-relTop" title="Relative opacity at the top neighbor">---</div>
+                                            <div class="cross-cell empty"></div>
+                                            <div class="cross-cell" id="kbuffer-relLeft" title="Relative opacity at the left neighbor">---</div>
+                                            <div class="cross-cell" id="kbuffer-relSelf" title="Relative opacity at the pixel">---</div>
+                                            <div class="cross-cell" id="kbuffer-relRight" title="Relative opacity at the right neighbor">---</div>
+                                            <div class="cross-cell empty"></div>
+                                            <div class="cross-cell" id="kbuffer-relBottom" title="Relative opacity at the bottom neighbor">---</div>
+                                            <div class="cross-cell empty"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="vertical-op-row"><div class="vertical-op">&times;</div></div>
+
+                            <div class="compute-row">
+                                <div class="row-side-label label-past-samples"><span>Past Samples</span></div>
+                                <div class="row-upstream">
+                                    <div class="intuition-banner">
+                                        <svg class="svg-icon" viewBox="0 0 352 512" style="width: 0.6875em;" aria-hidden="true"><use href="#icon-lightbulb"></use></svg>
+                                        <span>How much more or less is the sampled Gaussian occluded at the neighboring pixels?</span>
+                                    </div>
+                                    <div class="slots-flow">
+                                        <div class="slot-card" id="kbuffer-slotCard0">
+                                            <div class="slot-header"><span>#0</span><span class="slot-status-pill status-behind" id="kbuffer-slotStatus0">---</span></div>
+                                            <div class="slot-stat"><span>ID:</span> <strong id="kbuffer-slotId0">---</strong></div>
+                                            <div class="slot-stat"><span>\(z\):</span> <span id="kbuffer-slotDepth0">---</span></div>
+                                            <div class="directional-cross mini">
+                                                <div class="cross-cell empty"></div><div class="cross-cell" id="kbuffer-slotUp0">---</div><div class="cross-cell empty"></div>
+                                                <div class="cross-cell" id="kbuffer-slotLeft0">---</div><div class="cross-cell" id="kbuffer-slotCenter0">---</div><div class="cross-cell" id="kbuffer-slotRight0">---</div>
+                                                <div class="cross-cell empty"></div><div class="cross-cell" id="kbuffer-slotDown0">---</div><div class="cross-cell empty"></div>
+                                            </div>
+                                        </div>
+                                        <div class="math-operator slot-operator">&times;</div>
+                                        <div class="slot-card" id="kbuffer-slotCard1">
+                                            <div class="slot-header"><span>#1</span><span class="slot-status-pill status-behind" id="kbuffer-slotStatus1">---</span></div>
+                                            <div class="slot-stat"><span>ID:</span> <strong id="kbuffer-slotId1">---</strong></div>
+                                            <div class="slot-stat"><span>\(z\):</span> <span id="kbuffer-slotDepth1">---</span></div>
+                                            <div class="directional-cross mini">
+                                                <div class="cross-cell empty"></div><div class="cross-cell" id="kbuffer-slotUp1">---</div><div class="cross-cell empty"></div>
+                                                <div class="cross-cell" id="kbuffer-slotLeft1">---</div><div class="cross-cell" id="kbuffer-slotCenter1">---</div><div class="cross-cell" id="kbuffer-slotRight1">---</div>
+                                                <div class="cross-cell empty"></div><div class="cross-cell" id="kbuffer-slotDown1">---</div><div class="cross-cell empty"></div>
+                                            </div>
+                                        </div>
+                                        <div class="math-operator slot-operator">&times;</div>
+                                        <div class="slot-card" id="kbuffer-slotCard2">
+                                            <div class="slot-header"><span>#2</span><span class="slot-status-pill status-behind" id="kbuffer-slotStatus2">---</span></div>
+                                            <div class="slot-stat"><span>ID:</span> <strong id="kbuffer-slotId2">---</strong></div>
+                                            <div class="slot-stat"><span>\(z\):</span> <span id="kbuffer-slotDepth2">---</span></div>
+                                            <div class="directional-cross mini">
+                                                <div class="cross-cell empty"></div><div class="cross-cell" id="kbuffer-slotUp2">---</div><div class="cross-cell empty"></div>
+                                                <div class="cross-cell" id="kbuffer-slotLeft2">---</div><div class="cross-cell" id="kbuffer-slotCenter2">---</div><div class="cross-cell" id="kbuffer-slotRight2">---</div>
+                                                <div class="cross-cell empty"></div><div class="cross-cell" id="kbuffer-slotDown2">---</div><div class="cross-cell empty"></div>
+                                            </div>
+                                        </div>
+                                        <div class="math-operator slot-operator">&times;</div>
+                                        <div class="slot-card" id="kbuffer-slotCard3">
+                                            <div class="slot-header"><span>#3</span><span class="slot-status-pill status-behind" id="kbuffer-slotStatus3">---</span></div>
+                                            <div class="slot-stat"><span>ID:</span> <strong id="kbuffer-slotId3">---</strong></div>
+                                            <div class="slot-stat"><span>\(z\):</span> <span id="kbuffer-slotDepth3">---</span></div>
+                                            <div class="directional-cross mini">
+                                                <div class="cross-cell empty"></div><div class="cross-cell" id="kbuffer-slotUp3">---</div><div class="cross-cell empty"></div>
+                                                <div class="cross-cell" id="kbuffer-slotLeft3">---</div><div class="cross-cell" id="kbuffer-slotCenter3">---</div><div class="cross-cell" id="kbuffer-slotRight3">---</div>
+                                                <div class="cross-cell empty"></div><div class="cross-cell" id="kbuffer-slotDown3">---</div><div class="cross-cell empty"></div>
+                                            </div>
+                                        </div>
+                                        <div class="math-operator">=</div>
+                                    </div>
+                                </div>
+                                <div class="row-result">
+                                    <div class="result-box product-box">
+                                        <div class="compute-box-sub product-sub">
+                                            <span>\(\prod_{k \in K,\, z_k < z_r} o_{k \to n}\)</span>
+                                            <span class="tag is-success is-light occluder-tag" id="kbuffer-occluderCount">0 Occ</span>
+                                        </div>
+                                        <div class="directional-cross">
+                                            <div class="cross-cell empty"></div>
+                                            <div class="cross-cell" id="kbuffer-prodUp" title="Occlusion factor toward the top neighbor">---</div>
+                                            <div class="cross-cell empty"></div>
+                                            <div class="cross-cell" id="kbuffer-prodLeft" title="Occlusion factor toward the left neighbor">---</div>
+                                            <div class="cross-cell" id="kbuffer-prodCenter">---</div>
+                                            <div class="cross-cell" id="kbuffer-prodRight" title="Occlusion factor toward the right neighbor">---</div>
+                                            <div class="cross-cell empty"></div>
+                                            <div class="cross-cell" id="kbuffer-prodDown" title="Occlusion factor toward the bottom neighbor">---</div>
+                                            <div class="cross-cell empty"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="vertical-op-row"><div class="vertical-op equals">=</div></div>
+
+                            <div class="compute-row">
+                                <div class="row-side-label-spacer"></div>
+                                <div class="row-upstream explanation-pane">
+                                    <div class="intuition-banner">
+                                        <svg class="svg-icon" viewBox="0 0 352 512" style="width: 0.6875em;" aria-hidden="true"><use href="#icon-lightbulb"></use></svg>
+                                        <span>How much more or less likely is the sampled Gaussian to be drawn at the neighboring pixels?</span>
+                                    </div>
+                                    <div class="explanation">
+                                        That likelihood has two factors:
+                                        <ul>
+                                            <li><strong>Gaussian opacity (New Sample):</strong> how opaque the Gaussian is at the neighbor relative to the pixel <span class="nowrap">(\(\alpha_n / \alpha_{x,y}\))</span>.</li>
+                                            <li><strong>Occlusion (Past Samples):</strong> how much the closer Gaussians in the K-buffer <span class="nowrap">(\(z_k < z_r\))</span> occlude it at the neighbor relative to the pixel <span class="nowrap">(\(\prod o_k\))</span>. Important occluders also have high sample probability, which makes past samples on the same pixels importance samples for important occluders.</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                                <div class="row-result">
+                                    <div class="result-box final-box">
+                                        <div class="compute-box-title">Resampling Weights</div>
+                                        <div class="compute-box-sub">\(w_{x,y \rightarrow n}\)</div>
+                                        <div class="directional-cross">
+                                            <div class="cross-cell empty"></div>
+                                            <div class="cross-cell" id="kbuffer-weightTop" title="Weight toward the top neighbor">---</div>
+                                            <div class="cross-cell empty"></div>
+                                            <div class="cross-cell" id="kbuffer-weightLeft" title="Weight toward the left neighbor">---</div>
+                                            <div class="cross-cell" id="kbuffer-weightSelf" title="Weight at the pixel">---</div>
+                                            <div class="cross-cell" id="kbuffer-weightRight" title="Weight toward the right neighbor">---</div>
+                                            <div class="cross-cell empty"></div>
+                                            <div class="cross-cell" id="kbuffer-weightBottom" title="Weight toward the bottom neighbor">---</div>
+                                            <div class="cross-cell empty"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Convergence: PSNR/SSIM curves for 1 to 128 samples per pixel and a 3-way comparison at the selected count -->
+                    <h3 class="title is-4 mt-6">Convergence</h3>
+                    <div class="content has-text-justified">
+                        <p>
+                            Accumulating samples over frames, resampling improves the image right away: with a single
+                            sample per pixel, it gains 4.8&nbsp;dB PSNR over plain averaging. A uniform cross-shaped blur
+                            removes noise similarly at first, but plateaus at around 29.5&nbsp;dB, as it blends across
+                            depth edges, while our depth- and transmittance-aware weights keep edges sharp. Select a sample
+                            count in the plot to compare the images, and drag the dividers.
+                        </p>
+                    </div>
+                    <div class="kbuffer-widget kbuffer-convergence" id="kbuffer-convergence">
+                        <div class="threeway-grid">
+                            <div class="widget-card plot-card">
+                                <div class="plot-header">
+                                    <span class="section-title">Error over Samples per Pixel</span>
+                                    <div class="plot-metric-toggles">
+                                        <button class="plot-metric-btn" data-metric="psnr">PSNR</button>
+                                        <button class="plot-metric-btn active" data-metric="ssim">SSIM</button>
+                                    </div>
+                                </div>
+                                <div class="plot-sample-selectors">
+                                    <span class="selector-label">Samples:</span>
+                                    <div class="sample-pills">
+                                        <button class="sample-pill-btn" data-sample="1">1</button>
+                                        <button class="sample-pill-btn" data-sample="8">8</button>
+                                        <button class="sample-pill-btn active" data-sample="32">32</button>
+                                        <button class="sample-pill-btn" data-sample="64">64</button>
+                                        <button class="sample-pill-btn" data-sample="128">128</button>
+                                    </div>
+                                </div>
+                                <div class="plot-container">
+                                    <svg id="kbuffer-plotSvg" viewBox="0 0 520 280" preserveAspectRatio="xMidYMid meet"></svg>
+                                </div>
+                                <div class="plot-legend">
+                                    <span class="legend-item"><span class="legend-dot" style="background: #2563eb;"></span>Raw average: <span class="legend-val" id="kbuffer-legend-raw">--</span></span>
+                                    <span class="legend-item"><span class="legend-dot" style="background: #10b981;"></span>Ours: <span class="legend-val" id="kbuffer-legend-ours">--</span></span>
+                                    <span class="legend-item"><span class="legend-dot" style="background: #8b5cf6;"></span>Cross blur: <span class="legend-val" id="kbuffer-legend-cross">--</span></span>
+                                </div>
+                            </div>
+
+                            <div class="threeway-section">
+                                <div class="section-title threeway-title">
+                                    \(S = \)&nbsp;<span id="kbuffer-currentSample" class="current-sample">32</span>&nbsp;samples per pixel
+                                </div>
+                                <div class="threeway-viewport" id="kbuffer-threeway">
+                                    <div class="threeway-layer layer-left">
+                                        <img id="kbuffer-threeway-raw" alt="Raw sample average" draggable="false">
+                                        <div class="threeway-badge badge-left">
+                                            <span class="badge-title">Raw Average</span>
+                                            <span class="badge-psnr" id="kbuffer-metrics-raw"></span>
+                                        </div>
+                                    </div>
+                                    <div class="threeway-layer layer-middle">
+                                        <img id="kbuffer-threeway-ours" alt="Ours" draggable="false">
+                                        <div class="threeway-badge badge-middle">
+                                            <span class="badge-title">Ours</span>
+                                            <span class="badge-psnr" id="kbuffer-metrics-ours"></span>
+                                        </div>
+                                    </div>
+                                    <div class="threeway-layer layer-right">
+                                        <img id="kbuffer-threeway-cross" alt="Cross blur average" draggable="false">
+                                        <div class="threeway-badge badge-right">
+                                            <span class="badge-title">Cross Blur</span>
+                                            <span class="badge-psnr" id="kbuffer-metrics-cross"></span>
+                                        </div>
+                                    </div>
+                                    <div class="threeway-divider divider-1">
+                                        <div class="divider-line"></div>
+                                        <div class="divider-handle" title="Drag to move the boundary between raw average and ours"><svg class="svg-icon" viewBox="0 0 512 512" style="width: 1em;" aria-hidden="true"><use href="#icon-arrows-alt-h"></use></svg></div>
+                                    </div>
+                                    <div class="threeway-divider divider-2">
+                                        <div class="divider-line"></div>
+                                        <div class="divider-handle" title="Drag to move the boundary between ours and cross blur"><svg class="svg-icon" viewBox="0 0 512 512" style="width: 1em;" aria-hidden="true"><use href="#icon-arrows-alt-h"></use></svg></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Slider (same view, 128 spp): l1 error of a Gaussian blur kernel vs. ours with K = 4. -->
+                    <div class="content has-text-justified mt-5">
+                        <p>
+                            After 128 samples per pixel, a fixed blur kernel plateaus at a blurry, biased result, while our
+                            reuse keeps converging to sorted 3DGS.
+                        </p>
+                    </div>
+                    <div class="columns is-centered">
+                        <div class="column">
+                            <div class="b-dics">
+                                <img src="static/jpg/reuse/garden_128spp_blur_l1.png" loading="lazy" alt="Gaussian blur">
+                                <img src="static/jpg/reuse/garden_128spp_ours_l1.png" loading="lazy" alt="Ours (K = 4)">
+                            </div>
+                            <p class="caption">&#8467;<sub>1</sub> error</p>
+                        </div>
+                    </div>
+
+                    <!-- Ablation at 1 spp per scene: without/with L_var (top/bottom) x without/with resampling (left/right) -->
+                    <h3 class="title is-4 mt-6">A Match Made in Heaven</h3>
+                    <div class="content has-text-justified">
+                        <p>
+                            Variance regularization and resampling reinforce each other: with
+                            <span class="mathcal">L</span><sub>var</sub>, fewer Gaussians contribute to each pixel, so the
+                            occluders stored in the K-buffer match those of the neighboring pixels more closely and the
+                            resampling weights become more accurate. On these views, the combination improves the PSNR of
+                            a single sample per pixel by 7.2 to 9.7&nbsp;dB over plain stochastic rendering. Drag the
+                            center handle to compare the four variants.
+                        </p>
+                    </div>
+                    <div class="kbuffer-widget kbuffer-ablation" id="kbuffer-ablation">
+                        <div class="scene-buttons has-text-centered">
+                            <span class="scene-label">Scene:</span>
+                            <button class="button-17-selected" role="button" data-ablation-scene="bicycle">Bicycle</button>
+                            <button class="button-17" role="button" data-ablation-scene="bonsai">Bonsai</button>
+                            <button class="button-17" role="button" data-ablation-scene="counter">Counter</button>
+                            <button class="button-17" role="button" data-ablation-scene="garden">Garden</button>
+                            <button class="button-17" role="button" data-ablation-scene="kitchen">Kitchen</button>
+                            <button class="button-17" role="button" data-ablation-scene="room">Room</button>
+                            <button class="button-17" role="button" data-ablation-scene="stump">Stump</button>
+                        </div>
+                        <div class="fourway-viewport" id="kbuffer-fourwayViewport">
+                            <div class="fourway-layer" id="kbuffer-fourwayLayerTL">
+                                <img id="kbuffer-fourwayImgTL" alt="Without variance regularization, without resampling" draggable="false">
+                                <div class="fourway-badge badge-tl">
+                                    <div class="fourway-badge-tags"><span class="fourway-tag tag-v0">No Var Reg</span><span class="fourway-tag tag-stoch">Stochastic</span></div>
+                                    <div class="fourway-badge-psnr" id="kbuffer-fourwayPsnrTL"></div>
+                                </div>
+                            </div>
+                            <div class="fourway-layer" id="kbuffer-fourwayLayerTR">
+                                <img id="kbuffer-fourwayImgTR" alt="Without variance regularization, with resampling" draggable="false">
+                                <div class="fourway-badge badge-tr">
+                                    <div class="fourway-badge-tags"><span class="fourway-tag tag-v0">No Var Reg</span><span class="fourway-tag tag-kbuf">+ Resampling</span></div>
+                                    <div class="fourway-badge-psnr" id="kbuffer-fourwayPsnrTR"></div>
+                                </div>
+                            </div>
+                            <div class="fourway-layer" id="kbuffer-fourwayLayerBL">
+                                <img id="kbuffer-fourwayImgBL" alt="With variance regularization, without resampling" draggable="false">
+                                <div class="fourway-badge badge-bl">
+                                    <div class="fourway-badge-tags"><span class="fourway-tag tag-v1">+ Var Reg</span><span class="fourway-tag tag-stoch">Stochastic</span></div>
+                                    <div class="fourway-badge-psnr" id="kbuffer-fourwayPsnrBL"></div>
+                                </div>
+                            </div>
+                            <div class="fourway-layer" id="kbuffer-fourwayLayerBR">
+                                <img id="kbuffer-fourwayImgBR" alt="SteadySplats: with variance regularization and resampling" draggable="false">
+                                <div class="fourway-badge badge-br highlight-ours">
+                                    <div class="fourway-badge-tags"><span class="fourway-tag tag-v1">+ Var Reg</span><span class="fourway-tag tag-ours">+ Resampling</span></div>
+                                    <div class="fourway-badge-psnr" id="kbuffer-fourwayPsnrBR"></div>
+                                </div>
+                            </div>
+                            <div class="fourway-divider-v" id="kbuffer-fourwayDividerV"></div>
+                            <div class="fourway-divider-h" id="kbuffer-fourwayDividerH"></div>
+                            <div class="fourway-handle" id="kbuffer-fourwayHandle" title="Drag to move the quadrant boundaries"><svg class="svg-icon" viewBox="0 0 512 512" style="width: 1em;" aria-hidden="true"><use href="#icon-arrows-alt"></use></svg></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Method: spatio-temporal resampling and blue noise (paper Sec. 4.3). -->
+    <section class="section" id="temporal">
+        <div class="container is-max-desktop">
+            <div class="columns is-centered">
+                <div class="column is-full-width">
+                    <h2 class="title is-3">Spatio-Temporal Resampling</h2>
+                    <div class="content has-text-justified">
+                        <p>
+                            Color distributions are also coherent over time. Under mild assumptions, full spatio-temporal
+                            resampling reduces to a recursive exponential moving average along the motion trajectory.
+                            Instead of clamping the history color or resetting it at depth changes, we lower the weight of
+                            outlier history, which avoids both ghosting and popping.
+                        </p>
+                    </div>
+
+                    <h3 class="title is-4 mt-6">Comparisons under Camera Motion</h3>
+                    <div class="content has-text-justified">
+                        <p>
+                            Compare our full method (left) with StochasticSplats, Gaussian Point Splatting and sorted 3DGS
+                            (right) along camera paths. All stochastic methods render one sample per pixel and frame and
+                            accumulate the samples over time, each under their respective temporal filter. Drag the
+                            vertical divider to compare, and use the buttons to switch the method and the scene.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Method buttons: one per method in stackedMethodOrder (static/js/video_comparison.js), except Ours.
+                 Scene buttons: one per entry in comparisonScenes; each scene plays static/video/<Scene>.mp4. -->
+            <div class="comparison-controls">
+                <span class="comparison-controls-label">Comparison method:</span>
+                <div class="comparison-controls-buttons">
+                    <button class="button-17-selected" role="button" data-method="StochasticSplats"
+                        onclick="setComparisonMethod('StochasticSplats')">StochasticSplats</button>
+                    <button class="button-17" role="button" data-method="Gaussian Point Splatting"
+                        onclick="setComparisonMethod('Gaussian Point Splatting')">Gaussian Point Splatting</button>
+                    <button class="button-17" role="button" data-method="Sorted 3DGS"
+                        onclick="setComparisonMethod('Sorted 3DGS')">Sorted 3DGS</button>
+                </div>
+                <span class="comparison-controls-label">Scene:</span>
+                <div class="comparison-controls-buttons">
+                    <button class="button-17-selected" role="button" data-comparison-scene="Garden"
+                        onclick="setComparisonScene('Garden')">Garden</button>
+                    <button class="button-17" role="button" data-comparison-scene="Bicycle"
+                        onclick="setComparisonScene('Bicycle')">Bicycle</button>
+                    <button class="button-17" role="button" data-comparison-scene="Kitchen"
+                        onclick="setComparisonScene('Kitchen')">Kitchen</button>
+                    <button class="button-17" role="button" data-comparison-scene="Room"
+                        onclick="setComparisonScene('Room')">Room</button>
+                    <button class="button-17" role="button" data-comparison-scene="Stump"
+                        onclick="setComparisonScene('Stump')">Stump</button>
+                    <button class="button-17" role="button" data-comparison-scene="Counter"
+                        onclick="setComparisonScene('Counter')">Counter</button>
+                    <button class="button-17" role="button" data-comparison-scene="Bonsai"
+                        onclick="setComparisonScene('Bonsai')">Bonsai</button>
+                </div>
+            </div>
+
+            <div class="columns is-centered">
+                <div class="column is-full-width">
+                    <video id="comparison_video" loop playsinline autoplay muted style="height: 0px;"></video>
+                    <canvas class="videoMerge" id="comparison_canvas"></canvas>
+                </div>
+            </div>
+
+            <!-- Spatio-temporal blue noise: a toy widget (static/js/stbn_widget.js; NVIDIA's STBN volume in static/stbn/),
+                 then the slider on a real scene. -->
+            <div class="columns is-centered">
+                <div class="column is-full-width">
+                    <h3 class="title is-4 mt-5">Spatio-Temporal Blue Noise</h3>
+                    <div class="content has-text-justified">
+                        <p>
+                            Our renderer keeps a Gaussian at a pixel if a random threshold, drawn anew each frame, lies
+                            below its opacity, and the closest kept Gaussian colors the pixel. With white noise
+                            thresholds, the kept samples form clumps and holes, while spatio-temporal blue noise spreads
+                            them evenly over neighboring pixels and over frames. A single frame has the same error either
+                            way, but the evenly spread noise looks much smoother, and averaging over frames, as our
+                            temporal reuse does, removes it much faster. Sharing one blue noise texture between all
+                            Gaussians would correlate
+                            overlapping ones: the teal Gaussian is then only kept where the orange one in front of it is
+                            kept as well, so it never shows through. We therefore offset the texture per primitive.
+                        </p>
+                    </div>
+                    <div class="stbn-widget" id="stbn-widget">
+                        <div class="stbn-panels">
+                            <figure class="stbn-panel">
+                                <canvas id="stbn-canvas-white" width="64" height="64"></canvas>
+                                <figcaption><span class="stbn-label">White noise</span><span class="stbn-psnr" id="stbn-psnr-white">&nbsp;</span></figcaption>
+                            </figure>
+                            <figure class="stbn-panel">
+                                <canvas id="stbn-canvas-shared" width="64" height="64"></canvas>
+                                <figcaption><span class="stbn-label">Blue noise, shared</span><span class="stbn-psnr" id="stbn-psnr-shared">&nbsp;</span></figcaption>
+                            </figure>
+                            <figure class="stbn-panel stbn-ours">
+                                <canvas id="stbn-canvas-ours" width="64" height="64"></canvas>
+                                <figcaption><span class="stbn-label">Blue noise per primitive (ours)</span><span class="stbn-psnr" id="stbn-psnr-ours">&nbsp;</span></figcaption>
+                            </figure>
+                            <figure class="stbn-panel">
+                                <canvas id="stbn-canvas-reference" width="64" height="64"></canvas>
+                                <figcaption><span class="stbn-label">Reference</span><span class="stbn-psnr">exact &alpha;-blending</span></figcaption>
+                            </figure>
+                        </div>
+                        <div class="stbn-controls">
+                            <button class="button is-small is-dark" id="stbn-playBtn" title="Pause"><svg class="svg-icon" viewBox="0 0 448 512" style="width: 0.875em;" aria-hidden="true"><use href="#icon-pause"></use></svg></button>
+                            <span class="stbn-frame-badge" id="stbn-frameBadge">1 frame averaged</span>
+                            <div class="stbn-view-group">
+                                <span class="stbn-view-label">View:</span>
+                                <button class="button-17-selected" role="button" data-stbn-view="frames">Frames Averaged</button>
+                                <button class="button-17" role="button" data-stbn-view="frame">Single Frame</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Slider (zoomed crop, Kitchen, 5 samples per pixel accumulated, no reuse): uniform white noise (PCG32)
+                         vs. per-primitive spatio-temporal blue noise. Full width, since the difference is subtle. -->
+                    <div class="content has-text-justified mt-5">
+                        <p>
+                            On a real scene, averaged over 5 frames without reuse, blue noise gives a visibly smoother
+                            image.
+                        </p>
+                    </div>
+                    <div class="columns is-centered">
+                        <div class="column">
+                            <div class="b-dics">
+                                <img src="static/jpg/temporal/kitchen_crop2_white.jpg" loading="lazy" alt="White noise">
+                                <img src="static/jpg/temporal/kitchen_crop2_stbn.jpg" loading="lazy" alt="Blue noise">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Results (paper Sec. 5): tables 1 and 2. -->
+    <section class="section" id="results">
+        <div class="container is-max-desktop">
+            <div class="columns is-centered">
+                <div class="column is-full-width">
+                    <h2 class="title is-3">Results</h2>
+                    <div class="content has-text-justified">
+                        <p>
+                            We evaluate on 21 camera paths across 7 Mip-NeRF 360 scenes (3,152 frames) against sorted
+                            &alpha;-blending as ground truth, measuring image quality and temporal stability (tPSNR).
+                            The best value is shown in bold on dark green, the second best on light green.
+                        </p>
+                    </div>
+
+                    <h3 class="title is-5 mt-5 mb-3">Camera Path Benchmark</h3>
+                    <div class="table-container">
+                        <table class="table is-fullwidth results-table">
+                            <thead>
+                                <tr>
+                                    <th rowspan="2" class="has-text-left">Method</th>
+                                    <th rowspan="2">Avg. PSNR (dB) &uarr;</th>
+                                    <th rowspan="2">SSIM &uarr;</th>
+                                    <th rowspan="2">LPIPS &darr;</th>
+                                    <th rowspan="2">tPSNR (dB) &uarr;</th>
+                                    <th colspan="2">PSNR (dB) &uarr;</th>
+                                </tr>
+                                <tr>
+                                    <th>Indoor</th>
+                                    <th>Outdoor</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td class="has-text-left">StochasticSplats</td>
+                                    <td>18.336</td><td>0.293</td><td>0.667</td><td>15.235</td><td>19.562</td><td>16.701</td>
+                                </tr>
+                                <tr>
+                                    <td class="has-text-left">StochasticSplats + Temporal</td>
+                                    <td>21.954</td><td>0.552</td><td>0.524</td><td>19.450</td><td>23.313</td><td>20.141</td>
+                                </tr>
+                                <tr>
+                                    <td class="has-text-left">Ours</td>
+                                    <td class="second">31.437</td><td class="second">0.845</td><td class="second">0.345</td>
+                                    <td class="second">28.410</td><td class="second">32.978</td><td class="second">29.381</td>
+                                </tr>
+                                <tr>
+                                    <td class="has-text-left"><strong>Ours + Temporal</strong></td>
+                                    <td class="best">35.085</td><td class="best">0.937</td><td class="best">0.209</td>
+                                    <td class="best">32.449</td><td class="best">37.161</td><td class="best">32.318</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <h3 class="title is-5 mt-5 mb-3">Component Ablation</h3>
+                    <div class="table-container">
+                        <table class="table is-fullwidth results-table">
+                            <thead>
+                                <tr>
+                                    <th><span class="mathcal">L</span><sub>var</sub></th>
+                                    <th>Spatial Reuse</th>
+                                    <th>Temporal Reuse</th>
+                                    <th>tPSNR (dB) &uarr;</th>
+                                    <th>SSIM &uarr;</th>
+                                    <th>LPIPS &darr;</th>
+                                    <th>Avg. PSNR (dB) &uarr;</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>&mdash;</td><td>&mdash;</td><td>&mdash;</td>
+                                    <td>15.235</td><td>0.293</td><td>0.667</td><td>18.336</td>
+                                </tr>
+                                <tr>
+                                    <td>&mdash;</td><td>&check;</td><td>&mdash;</td>
+                                    <td>21.720</td><td>0.586</td><td>0.498</td><td>24.774</td>
+                                </tr>
+                                <tr>
+                                    <td>&mdash;</td><td>&mdash;</td><td>&check;</td>
+                                    <td>22.204</td><td>0.619</td><td>0.522</td><td>25.227</td>
+                                </tr>
+                                <tr>
+                                    <td>&mdash;</td><td>&check;</td><td>&check;</td>
+                                    <td>27.188</td><td>0.817</td><td>0.365</td><td>29.946</td>
+                                </tr>
+                            </tbody>
+                            <tbody>
+                                <tr>
+                                    <td>&check;</td><td>&mdash;</td><td>&mdash;</td>
+                                    <td>22.423</td><td>0.613</td><td>0.525</td><td>25.561</td>
+                                </tr>
+                                <tr>
+                                    <td>&check;</td><td>&check;</td><td>&mdash;</td>
+                                    <td>28.410</td><td>0.845</td><td class="second">0.345</td><td>31.437</td>
+                                </tr>
+                                <tr>
+                                    <td>&check;</td><td>&mdash;</td><td>&check;</td>
+                                    <td class="second">28.980</td><td class="second">0.863</td><td>0.357</td>
+                                    <td class="second">31.953</td>
+                                </tr>
+                                <tr>
+                                    <td>&check;</td><td>&check;</td><td>&check;</td>
+                                    <td class="best">32.449</td><td class="best">0.937</td><td class="best">0.209</td>
+                                    <td class="best">35.085</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="section" id="BibTeX">
+        <div class="container is-max-desktop content">
+            <h2 class="title is-3">BibTeX</h2>
+            <div class="bibtex-block">
+                <button class="button is-small copy-button" onclick="copyBibtex(this)">Copy</button>
+                <pre><code id="bibtex">@misc{windisch2026steadysplats,
+  title         = {SteadySplats: Resampling of Low-Variance Gaussians for High-Fidelity Stochastic Rendering},
+  author        = {Felix Windisch and Thomas K{\"o}hler and Lukas Radl and Chris Wyman and Georgios Kopanas and Bernhard Kerbl and Markus Steinberger},
+  year          = {2026},
+  eprint        = {2610.05576},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CV},
+  url           = {https://arxiv.org/abs/2610.05576}
+}</code></pre>
+            </div>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <div class="container is-max-desktop">
+            <div class="content has-text-centered is-size-7">
+                <p>
+                    Website template adapted from <a href="https://github.com/nerfies/nerfies.github.io">Nerfies</a>,
+                    licensed under <a rel="license" href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>.
+                    The blue noise widget uses textures from NVIDIA's
+                    <a href="https://github.com/NVIDIAGameWorks/SpatiotemporalBlueNoiseSDK">Spatiotemporal Blue Noise SDK</a>
+                    (<a href="./static/stbn/License.txt">license</a>).
+                </p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            initVideoComparison();
+        });
+    </script>
+
+</body>
+
+</html>

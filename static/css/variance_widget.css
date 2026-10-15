@@ -1,0 +1,316 @@
+/* Stochastic Splats Explorer (variance widget). All rules are scoped to .variance-widget. */
+
+.variance-widget {
+    /* White background theme */
+    --bg-card: #ffffff;
+    --border-color: #e2e8f0;
+    --border-dark: #cbd5e1;
+    --text-primary: #0f172a;
+    --text-secondary: #334155;
+    --text-muted: #64748b;
+
+    /* Viridis palette accents */
+    --viridis-purple: #440154;
+    --viridis-blue: #3b528b;
+    --viridis-teal: #21918c;
+    --viridis-green: #5ec962;
+    --viridis-yellow: #fde725;
+
+    color: var(--text-primary);
+    user-select: none;
+}
+
+.variance-widget .scene-buttons {
+    margin-bottom: 1rem;
+}
+
+.variance-widget .variance-body {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+}
+
+/* 1. Main Canvas Card (Center) */
+.variance-widget .canvas-card {
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 10px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    min-width: 0;
+}
+
+.variance-widget .canvas-wrapper {
+    position: relative;
+    display: inline-block;
+    border-radius: 6px;
+    overflow: visible; /* Allow floating loupe to extend slightly if needed */
+    user-select: none;
+    background-color: #000;
+    touch-action: pan-y; /* sideways swipes inspect pixels or move the divider, vertical ones scroll the page */
+}
+
+#variance-imageCanvas {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    border-radius: 6px;
+}
+
+#variance-overlayCanvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+
+/* Clean Split Labels on Image */
+.variance-widget .split-label-left, .variance-widget .split-label-right {
+    position: absolute;
+    top: 10px;
+    background-color: #ffffff;
+    color: #0f172a;
+    font-size: 0.82rem;
+    font-weight: 700;
+    padding: 5px 12px;
+    border-radius: 6px;
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    pointer-events: none;
+    backdrop-filter: blur(4px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+}
+
+.variance-widget .split-label-left {
+    left: 12px;
+}
+
+.variance-widget .split-label-right {
+    right: 12px;
+}
+
+.variance-widget .pause-badge {
+    position: absolute;
+    bottom: 10px;
+    right: 12px;
+    background-color: rgba(15, 23, 42, 0.85);
+    color: #ffffff;
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 4px;
+    pointer-events: none;
+    display: none;
+}
+
+/* Floating Magnified Loupe View (appears top-left of mouse on hover) */
+.variance-widget .floating-loupe {
+    position: absolute;
+    width: 140px;
+    height: 140px;
+    border: 2px solid #ffffff;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #000;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35), 0 2px 6px rgba(0, 0, 0, 0.2);
+    pointer-events: none;
+    display: none;
+    z-index: 30;
+}
+
+#variance-loupeCanvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    image-rendering: pixelated;
+}
+
+/* Yellow box around the center pixel of the 21x21 loupe, as in the K-buffer explorer */
+.variance-widget .loupe-crosshair {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: calc(100% / 21);
+    height: calc(100% / 21);
+    box-sizing: content-box; /* the border goes around the pixel */
+    transform: translate(-50%, -50%);
+    border: 2px solid #fde725;
+}
+
+/* Shown while a pixel is locked, as in the K-buffer explorer (the λ labels take the top corners) */
+.variance-widget .lock-badge {
+    position: absolute;
+    bottom: 10px;
+    left: 12px;
+    display: none;
+    background: rgba(15, 23, 42, 0.85);
+    color: #fde68a;
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 3px 9px;
+    border-radius: 6px;
+    pointer-events: none;
+}
+
+/* 2. Compact Distribution Panels (Left & Right) */
+.variance-widget .distribution-panel {
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 16px 20px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.variance-widget .model-header {
+    text-align: center;
+    margin-bottom: 12px;
+}
+
+.variance-widget .model-variance {
+    font-size: 0.92rem;
+    font-weight: 700;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: var(--text-primary);
+}
+
+.variance-widget .bar-circle-column {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+}
+
+/* Vertical Stacked Bar */
+.variance-widget .vertical-stacked-bar {
+    width: 52px;
+    height: 310px;
+    background-color: #000000;
+    border: 1px solid var(--border-dark);
+    border-radius: 4px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column-reverse; /* Stack from bottom to top */
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+    position: relative;
+}
+
+.variance-widget .v-bar-segment {
+    width: 100%;
+    transition: opacity 0.1s;
+    cursor: pointer;
+}
+
+.variance-widget .v-bar-segment:hover {
+    opacity: 0.85;
+    outline: 2px solid var(--viridis-yellow);
+    z-index: 2;
+}
+
+/* Converged Color Circle - Placed below bar and matching width (52px) */
+.variance-widget .converged-circle {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    border: 2px solid var(--border-dark);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+    cursor: pointer;
+    transition: transform 0.15s, background-color 0.1s;
+    flex-shrink: 0;
+}
+
+.variance-widget .converged-circle:hover {
+    transform: scale(1.08);
+    outline: 2px solid var(--viridis-yellow);
+}
+
+/* Covers the panels and the image (not the scene buttons) while scene data loads */
+.variance-widget .loading-overlay {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 40;
+    gap: 16px;
+}
+
+.variance-widget .spinner {
+    width: 44px;
+    height: 44px;
+    border: 4px solid var(--border-color);
+    border-top-color: var(--viridis-teal);
+    border-radius: 50%;
+    animation: variance-spin 0.8s linear infinite;
+}
+
+@keyframes variance-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Tooltip */
+#variance-tooltip {
+    position: fixed;
+    background-color: rgba(15, 23, 42, 0.94);
+    color: #ffffff;
+    border: 1px solid var(--border-dark);
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 0.76rem;
+    pointer-events: none;
+    display: none;
+    z-index: 50;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* Below desktop width, the image would shrink too much between the panels: image on top,
+   each distribution panel centered below the half of the image it belongs to.
+   (1023.98px instead of 1023px, so fractional viewport widths at 150% display scaling are covered too) */
+@media screen and (max-width: 1023.98px) {
+    .variance-widget .variance-body {
+        display: grid;
+        grid-template-columns: auto auto;
+        justify-content: center;
+        justify-items: center;
+    }
+
+    .variance-widget .canvas-card {
+        grid-column: 1 / -1;
+        order: -1;
+    }
+
+    .variance-widget .vertical-stacked-bar {
+        height: 200px;
+    }
+}
+
+@media screen and (max-width: 768px) {
+    .variance-widget .floating-loupe {
+        width: 100px;
+        height: 100px;
+    }
+}
+
+/* Touch screens have no Space key: the badge stays visible there as a pause button */
+@media (hover: none) {
+    .variance-widget .pause-badge {
+        pointer-events: auto;
+        cursor: pointer;
+        padding: 6px 12px;
+        font-size: 0.8rem;
+    }
+}

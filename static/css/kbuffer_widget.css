@@ -1,0 +1,1792 @@
+/* History-based spatial resampling widgets (toy example, K-buffer explorer, convergence and ablation comparisons).
+   All rules are scoped to .kbuffer-widget. Breakpoints: 1024px (the toy's four steps fit in one row), 899.98px
+   (side-by-side panels stack; .98 covers fractional viewport widths at 150% display scaling) and 768px (phones, as
+   for the rest of the page). */
+
+.kbuffer-widget {
+    --border-color: #e2e8f0;
+    --border-dark: #cbd5e1;
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --text-muted: #64748b;
+    --kb-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+    /* Viridis palette accents */
+    --viridis-blue: #31688e;
+    --viridis-teal: #21918c;
+    --viridis-green: #5ec962;
+    --viridis-yellow: #fde725;
+    --slot-active: #3b82f6;
+
+    color: var(--text-primary);
+}
+
+.kbuffer-widget .kb-mono {
+    font-family: var(--kb-mono);
+}
+
+.kbuffer-widget .widget-card {
+    background: #ffffff;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+    padding: 16px;
+}
+
+.kbuffer-widget .card-title,
+.kbuffer-widget .section-title {
+    font-family: 'Jost', sans-serif;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.kbuffer-widget .card-title {
+    border-bottom: 1px solid #f1f5f9;
+    padding-bottom: 8px;
+    margin-bottom: 12px;
+}
+
+.kbuffer-widget .row-label,
+.kbuffer-widget .scene-label {
+    font-weight: 500;
+    margin-right: 4px;
+}
+
+/* ============================================================================================================
+   2-pixel toy example
+   ============================================================================================================ */
+
+/* 2x2 between phone and desktop widths; the four steps fit in one row only at desktop width (end of section) */
+.kbuffer-toy .toy-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.kbuffer-toy .toy-group {
+    background: #f8fafc;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.kbuffer-toy .toy-group-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: 8px;
+}
+
+.kbuffer-toy .toy-group-title {
+    font-family: 'Jost', sans-serif;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.kbuffer-toy .toy-group-badge {
+    font-size: 0.68rem;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 999px;
+    white-space: nowrap;
+}
+
+.kbuffer-toy .badge-truth {
+    background: #f1f5f9;
+    color: var(--text-secondary);
+    border: 1px solid var(--border-dark);
+}
+
+.kbuffer-toy .badge-raw {
+    background: #fef2f2;
+    color: #dc2626;
+    border: 1px solid #fecaca;
+}
+
+.kbuffer-toy .badge-weights {
+    background: #eff6ff;
+    color: #2563eb;
+    border: 1px solid #bfdbfe;
+}
+
+.kbuffer-toy .badge-ours {
+    background: #ecfdf5;
+    color: #059669;
+    border: 1px solid #a7f3d0;
+}
+
+.kbuffer-toy .toy-reference-layout {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin: 6px 0;
+}
+
+.kbuffer-toy .toy-sample-layout {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 80px;
+    margin: 6px 0;
+}
+
+.kbuffer-toy .toy-weights-layout {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 6px;
+    min-height: 80px;
+    margin: 6px 0;
+}
+
+.kbuffer-toy .toy-weight-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    background: #ffffff;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 4px 8px;
+}
+
+.kbuffer-toy .toy-weight-formula {
+    font-size: 0.8rem;
+    color: #1e293b;
+}
+
+.kbuffer-toy .toy-weight-eq {
+    margin-left: auto; /* keeps "= value" together on the right in wide rows */
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.kbuffer-toy .toy-weight-val {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #2563eb;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 4px;
+    padding: 1px 5px;
+    min-width: 38px;
+    text-align: center;
+}
+
+.kbuffer-toy .toy-dist-pane {
+    flex: 1;
+    min-width: 0;
+    max-width: 150px;
+    text-align: center;
+}
+
+.kbuffer-toy .toy-dist-label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    display: block;
+    margin-bottom: 2px;
+}
+
+.kbuffer-toy .toy-dist-svg {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+.kbuffer-toy .toy-pixels-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.kbuffer-toy .toy-pixel-pair {
+    display: flex;
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15);
+    border: 1.5px solid #334155;
+}
+
+.kbuffer-toy .toy-pixel {
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.25s ease;
+}
+
+.kbuffer-toy .toy-pixel-tag {
+    font-family: var(--kb-mono);
+    font-size: 0.72rem;
+    font-weight: 800;
+    color: rgba(255, 255, 255, 0.95);
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+}
+
+.kbuffer-toy .toy-pixels-caption {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+.kbuffer-toy .toy-metric-bar {
+    margin-top: 8px;
+    padding: 5px 10px;
+    background: #ffffff;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.78rem;
+}
+
+.kbuffer-toy .toy-metric-bar.highlight-resampled {
+    background: #f0fdf4;
+    border-color: #bbf7d0;
+}
+
+.kbuffer-toy .toy-metric-label {
+    color: var(--text-muted);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.kbuffer-toy .toy-metric-val {
+    font-family: var(--kb-mono);
+    font-weight: 700;
+}
+
+.kbuffer-toy .toy-reduction-badge {
+    font-size: 0.7rem;
+    font-weight: 800;
+    padding: 1px 6px;
+    border-radius: 4px;
+    margin-left: 4px;
+    white-space: nowrap;
+}
+
+.kbuffer-toy .badge-better {
+    background: #dcfce7;
+    color: #15803d;
+    border: 1px solid #86efac;
+}
+
+.kbuffer-toy .badge-worse {
+    background: #fee2e2;
+    color: #b91c1c;
+    border: 1px solid #fca5a5;
+}
+
+.kbuffer-toy .toy-actions {
+    display: flex;
+    justify-content: center;
+    margin-top: 1rem;
+}
+
+/* One row: badges below the titles and smaller pixels leave room for the content of the narrow columns */
+@media screen and (min-width: 1024px) {
+    .kbuffer-toy .toy-grid {
+        grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.8fr) minmax(0, 1.05fr) minmax(0, 1fr);
+    }
+
+    .kbuffer-toy .toy-group-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .kbuffer-toy .toy-pixel {
+        width: 40px;
+        height: 40px;
+    }
+}
+
+/* ============================================================================================================
+   K-buffer explorer
+   ============================================================================================================ */
+
+.kbuffer-explorer .explorer-top {
+    display: grid;
+    grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.kbuffer-explorer .image-card {
+    padding: 12px;
+}
+
+/* Sideways swipes inspect pixels, vertical ones scroll the page */
+.kbuffer-explorer .canvas-wrapper {
+    position: relative;
+    background: #000000;
+    border-radius: 8px;
+    cursor: crosshair;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: pan-y;
+}
+
+#kbuffer-imageCanvas {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 8px;
+    image-rendering: pixelated;
+}
+
+#kbuffer-overlayCanvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+
+.kbuffer-explorer .image-loading {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #e2e8f0;
+    font-size: 0.9rem;
+    font-weight: 600;
+    pointer-events: none;
+}
+
+.kbuffer-explorer .lock-badge {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    display: none;
+    background: rgba(15, 23, 42, 0.85);
+    color: #fde68a;
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 3px 9px;
+    border-radius: 6px;
+    pointer-events: none;
+}
+
+.kbuffer-explorer .floating-loupe {
+    position: absolute;
+    width: 150px;
+    height: 150px;
+    border: 3px solid #ffffff;
+    border-radius: 10px;
+    overflow: hidden;
+    background: #000000;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+    pointer-events: none;
+    display: none;
+    z-index: 30;
+}
+
+.kbuffer-explorer .loupe-canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    image-rendering: pixelated;
+}
+
+/* Yellow box around the center pixel of the 15x15 loupe */
+.kbuffer-explorer .loupe-crosshair {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: calc(100% / 15);
+    height: calc(100% / 15);
+    box-sizing: content-box; /* the border goes around the pixel */
+    transform: translate(-50%, -50%);
+    border: 2px solid var(--viridis-yellow);
+}
+
+.kbuffer-explorer .controls-card {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.kbuffer-explorer .playback-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.kbuffer-explorer .playback-row .button {
+    flex-shrink: 0;
+}
+
+.kbuffer-explorer .frame-slider {
+    flex: 1;
+    min-width: 60px;
+    accent-color: var(--viridis-blue);
+    cursor: pointer;
+}
+
+.kbuffer-explorer .frame-badge {
+    font-family: var(--kb-mono);
+    font-size: 0.85rem;
+    font-weight: 700;
+    background: #0f172a;
+    color: #ffffff;
+    padding: 3px 10px;
+    border-radius: 6px;
+    white-space: nowrap;
+}
+
+.kbuffer-explorer .view-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.kbuffer-explorer .badge-group {
+    display: inline-flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+    margin-left: 8px;
+}
+
+.kbuffer-explorer .metrics-badge {
+    font-family: var(--kb-mono);
+    font-size: 0.8rem;
+    font-weight: 600;
+    background: #eff6ff;
+    color: #1e40af;
+    border: 1px solid #bfdbfe;
+    padding: 2px 8px;
+    border-radius: 6px;
+}
+
+/* Panels showing pixel data are dimmed while the data of the inspected pixel loads */
+.kbuffer-explorer.is-loading-pixel .data-panel > :not(.pixel-status) {
+    opacity: 0.45;
+    transition: opacity 0.2s ease;
+}
+
+.kbuffer-explorer .compute-card {
+    position: relative;
+}
+
+.kbuffer-explorer .pixel-status {
+    position: absolute;
+    top: 8px;
+    right: 14px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    z-index: 1;
+}
+
+/* ---- 3x3 neighborhood ---- */
+
+/* As tall as the image card, with the panels and the formula centered vertically */
+.kbuffer-explorer .neighborhood-card {
+    display: flex;
+    flex-direction: column;
+}
+
+.kbuffer-explorer .neighborhood-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: auto;
+}
+
+.kbuffer-explorer .neighborhood-card .nh-formula {
+    margin-bottom: auto;
+}
+
+.kbuffer-explorer .nh-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: #f8fafc;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 8px;
+    flex: 1;
+    min-width: 0;
+    max-width: 240px;
+}
+
+.kbuffer-explorer .nh-title {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #1e293b;
+    margin-bottom: 6px;
+}
+
+.kbuffer-explorer .nh-svg {
+    display: block;
+    width: 100%;
+    max-width: 220px;
+    height: auto;
+}
+
+.kbuffer-explorer .nh-arrow-item {
+    cursor: pointer;
+}
+
+.kbuffer-explorer .nh-arrow-hitbox {
+    stroke: transparent;
+    stroke-width: 16;
+    pointer-events: stroke;
+}
+
+.kbuffer-explorer .nh-arrow-line {
+    transition: stroke 0.15s ease, stroke-width 0.15s ease;
+}
+
+/* Weight badges show on hover, or after a tap on touch screens */
+.kbuffer-explorer .nh-arrow-badge {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease;
+}
+
+.kbuffer-explorer .nh-arrow-badge rect {
+    fill: #1e293b;
+    stroke: #ffffff;
+    stroke-width: 1;
+}
+
+.kbuffer-explorer .nh-arrow-badge text {
+    fill: #ffffff;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.kbuffer-explorer .nh-arrow-item:hover .nh-arrow-badge,
+.kbuffer-explorer .nh-arrow-item.is-active .nh-arrow-badge {
+    opacity: 1;
+}
+
+.kbuffer-explorer .nh-arrow-item:hover .nh-arrow-line,
+.kbuffer-explorer .nh-arrow-item.is-active .nh-arrow-line {
+    filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.95)) brightness(1.25);
+}
+
+.kbuffer-explorer .nh-transition {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    color: var(--viridis-teal);
+    font-size: 1.1rem;
+    flex-shrink: 0;
+}
+
+.kbuffer-explorer .nh-transition-caption {
+    font-size: 0.62rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-align: center;
+    line-height: 1.15;
+    margin-top: 4px;
+}
+
+.kbuffer-explorer .nh-formula {
+    margin-top: 10px;
+    padding: 6px 12px;
+    background: #f8fafc;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    text-align: center;
+    font-size: 0.9rem;
+}
+
+/* ---- Computation grid ---- */
+
+.kbuffer-explorer .compute-row {
+    display: flex;
+    align-items: stretch;
+    gap: 10px;
+}
+
+/* Rotated labels at the left of the rows */
+.kbuffer-explorer .row-side-label {
+    width: 26px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    padding: 6px 0;
+}
+
+.kbuffer-explorer .row-side-label span {
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    white-space: nowrap;
+    font-family: 'Jost', sans-serif;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+}
+
+.kbuffer-explorer .label-new-sample {
+    background: linear-gradient(180deg, #ecfdf5 0%, #d1fae5 100%);
+    border: 1px solid #a7f3d0;
+    color: #047857;
+}
+
+.kbuffer-explorer .label-past-samples {
+    background: linear-gradient(180deg, #eff6ff 0%, #dbeafe 100%);
+    border: 1px solid #bfdbfe;
+    color: #1d4ed8;
+}
+
+.kbuffer-explorer .row-side-label-spacer {
+    width: 26px;
+    flex-shrink: 0;
+}
+
+.kbuffer-explorer .row-upstream {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    background: #f8fafc;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 8px 10px;
+}
+
+.kbuffer-explorer .intuition-banner {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: 6px;
+    padding: 5px 10px;
+    font-size: 0.76rem;
+    font-weight: 600;
+    color: #166534;
+    line-height: 1.35;
+}
+
+.kbuffer-explorer .intuition-banner svg {
+    color: #22c55e;
+    flex-shrink: 0;
+}
+
+.kbuffer-explorer .upstream-flow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex: 1;
+}
+
+/* The labels sit above their cells outside the layout, so ÷ and = center on the cells, not on cells and labels */
+.kbuffer-explorer .flow-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding-top: 22px;
+}
+
+.kbuffer-explorer .flow-group .compute-box {
+    position: relative;
+}
+
+.kbuffer-explorer .flow-group .compute-box-sub {
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    white-space: nowrap;
+}
+
+.kbuffer-explorer .sample-card {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    background: #ffffff;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 6px 8px;
+    min-width: 170px;
+    font-size: 0.72rem;
+}
+
+.kbuffer-explorer .swatch-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 3px;
+}
+
+.kbuffer-explorer .color-swatch {
+    width: 34px;
+    height: 34px;
+    border-radius: 6px;
+    border: 2px solid var(--border-dark);
+    background: #000000;
+    flex-shrink: 0;
+}
+
+.kbuffer-explorer .swatch-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.kbuffer-explorer .summary-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.kbuffer-explorer .swatch-rgb {
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.kbuffer-explorer .meta-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 6px;
+}
+
+.kbuffer-explorer .meta-item .tag {
+    font-size: 0.7rem;
+    font-weight: 700;
+    height: 1.5em;
+    padding: 0 5px;
+}
+
+.kbuffer-explorer .sample-eval-note {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    background: #ffffff;
+    border: 1px solid var(--border-color);
+    border-left: 3px solid #059669;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 0.74rem;
+    color: var(--text-secondary);
+    line-height: 1.45;
+    flex: 1;
+    max-width: 290px;
+}
+
+.kbuffer-explorer .sample-eval-note .eval-note-title {
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+}
+
+.kbuffer-explorer .compute-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+
+.kbuffer-explorer .compute-box-title {
+    font-size: 0.76rem;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.kbuffer-explorer .compute-box-sub {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    margin-bottom: 2px;
+    line-height: 1.2;
+}
+
+.kbuffer-explorer .math-operator {
+    font-size: 1.4rem;
+    font-weight: 800;
+    color: #94a3b8;
+    flex-shrink: 0;
+    user-select: none;
+}
+
+.kbuffer-explorer .row-result {
+    width: 154px;
+    flex-shrink: 0;
+    display: flex;
+}
+
+.kbuffer-explorer .result-box {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    background: #ffffff;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 8px;
+}
+
+.kbuffer-explorer .product-box {
+    border: 1.5px solid var(--viridis-teal);
+    background: #f8fafc;
+}
+
+.kbuffer-explorer .final-box {
+    border: 2px solid var(--viridis-teal);
+    box-shadow: 0 2px 8px rgba(33, 145, 140, 0.15);
+}
+
+.kbuffer-explorer .product-sub {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+}
+
+.kbuffer-explorer .occluder-tag {
+    font-size: 0.62rem;
+    font-weight: 700;
+    height: 1.4em;
+    padding: 0 5px;
+}
+
+/* Operators between the rows, centered over the result column */
+.kbuffer-explorer .vertical-op-row {
+    display: flex;
+    justify-content: flex-end;
+    height: 28px;
+}
+
+.kbuffer-explorer .vertical-op {
+    width: 154px;
+    text-align: center;
+    font-size: 1.5rem;
+    font-weight: 800;
+    line-height: 28px;
+    color: var(--text-muted);
+    user-select: none;
+}
+
+.kbuffer-explorer .vertical-op.equals {
+    color: var(--viridis-teal);
+}
+
+/* 3x3 crosses of square cells */
+.kbuffer-explorer .directional-cross {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(3, 40px);
+    grid-template-rows: repeat(3, 40px);
+    width: 120px;
+    height: 120px;
+    flex-shrink: 0;
+}
+
+.kbuffer-explorer .directional-cross.mini {
+    grid-template-columns: repeat(3, 26px);
+    grid-template-rows: repeat(3, 26px);
+    width: 78px;
+    height: 78px;
+    margin: 3px auto 0;
+}
+
+.kbuffer-explorer .cross-cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #f8fafc;
+    border: 1px solid rgba(15, 23, 42, 0.22);
+    font-family: var(--kb-mono);
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #0f172a;
+    overflow: hidden;
+    white-space: nowrap;
+    user-select: none;
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.kbuffer-explorer .directional-cross.mini .cross-cell {
+    font-size: 0.58rem;
+    letter-spacing: -0.4px;
+}
+
+.kbuffer-explorer .cross-cell.empty {
+    visibility: hidden;
+}
+
+.kbuffer-explorer .divisor-cell {
+    width: 40px;
+    height: 40px;
+    border-radius: 4px;
+}
+
+/* The opacities lie translucently over an illustration of the sampled Gaussian */
+.kbuffer-explorer .raw-alpha-cross {
+    border-radius: 6px;
+    background: #f8fafc;
+    box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.1);
+}
+
+.kbuffer-explorer .gaussian-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 120px;
+    height: 120px;
+    border-radius: 6px;
+    pointer-events: none;
+}
+
+.kbuffer-explorer .raw-alpha-cross .cross-cell {
+    position: relative;
+}
+
+/* ---- K-buffer slots ---- */
+
+.kbuffer-explorer .slots-flow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+    flex: 1;
+}
+
+.kbuffer-explorer .slot-card {
+    flex: 1;
+    min-width: 84px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    background: #ffffff;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 5px 6px;
+    transition: all 0.15s ease;
+}
+
+.kbuffer-explorer .slot-card.slot-behind {
+    background: #f1f5f9;
+    border-color: var(--border-dark);
+    opacity: 0.82;
+}
+
+.kbuffer-explorer .slot-card.slot-behind .cross-cell:not(.empty) {
+    background-color: #e2e8f0 !important;
+    color: var(--text-muted) !important;
+    border-color: var(--border-dark) !important;
+}
+
+.kbuffer-explorer .slot-card.slot-occluding {
+    border-color: #86efac;
+    box-shadow: 0 1px 4px rgba(16, 185, 129, 0.15);
+}
+
+/* The slot that receives the current sample at the end of the frame */
+.kbuffer-explorer .slot-card.active-insert {
+    border-color: var(--slot-active);
+    box-shadow: 0 0 0 1px var(--slot-active);
+}
+
+.kbuffer-explorer .slot-header {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+}
+
+.kbuffer-explorer .slot-status-pill {
+    font-size: 0.62rem;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 4px;
+}
+
+.kbuffer-explorer .status-occluding {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.kbuffer-explorer .status-behind {
+    background: #e2e8f0;
+    color: var(--text-muted);
+}
+
+.kbuffer-explorer .slot-stat {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    gap: 4px;
+    font-size: 0.66rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+/* ---- Explanation of the weights ---- */
+
+.kbuffer-explorer .explanation-pane {
+    background: #ffffff;
+}
+
+.kbuffer-explorer .explanation {
+    font-size: 0.78rem;
+    color: #334155;
+    line-height: 1.45;
+    background: #f8fafc;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 6px 10px;
+}
+
+.kbuffer-explorer .explanation ul {
+    margin: 3px 0 0 1.1em;
+    list-style: disc;
+}
+
+/* ============================================================================================================
+   Convergence plot and 3-way comparison
+   ============================================================================================================ */
+
+.kbuffer-convergence .threeway-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    align-items: start;
+}
+
+.kbuffer-convergence .plot-card {
+    padding: 14px;
+}
+
+.kbuffer-convergence .plot-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.kbuffer-convergence .plot-metric-toggles {
+    display: inline-flex;
+    gap: 4px;
+    background: #f1f5f9;
+    padding: 2px;
+    border-radius: 999px;
+    border: 1px solid var(--border-color);
+}
+
+.kbuffer-convergence .plot-metric-btn {
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 999px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.kbuffer-convergence .plot-metric-btn:hover {
+    color: #0f172a;
+}
+
+.kbuffer-convergence .plot-metric-btn.active {
+    background: #0f172a;
+    color: #ffffff;
+}
+
+.kbuffer-convergence .plot-sample-selectors {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    margin-bottom: 10px;
+    padding: 6px 10px;
+    background: #f8fafc;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+}
+
+.kbuffer-convergence .selector-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.kbuffer-convergence .sample-pills {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+}
+
+.kbuffer-convergence .sample-pill-btn {
+    font-family: var(--kb-mono);
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 2px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border-dark);
+    background: #ffffff;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.kbuffer-convergence .sample-pill-btn:hover {
+    border-color: #94a3b8;
+    background: #f1f5f9;
+}
+
+.kbuffer-convergence .sample-pill-btn.active {
+    background: #10b981;
+    color: #ffffff;
+    border-color: #059669;
+}
+
+.kbuffer-convergence .plot-container {
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    overflow: hidden;
+}
+
+#kbuffer-plotSvg {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+.kbuffer-convergence .plot-hitbox {
+    cursor: pointer;
+}
+
+.kbuffer-convergence .plot-legend {
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+    margin-top: 10px;
+    font-size: 0.76rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.kbuffer-convergence .legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.kbuffer-convergence .legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.kbuffer-convergence .legend-val {
+    font-family: var(--kb-mono);
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.kbuffer-convergence .threeway-title {
+    margin-bottom: 8px;
+}
+
+.kbuffer-convergence .current-sample {
+    color: #059669;
+    font-weight: 700;
+}
+
+/* Taps and sideways drags move the dividers, vertical swipes scroll the page; the handles drag in any direction */
+.kbuffer-convergence .threeway-viewport {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 648 / 420;
+    overflow: hidden;
+    border-radius: 10px;
+    background: #090d16;
+    border: 1px solid var(--border-dark);
+    box-shadow: 0 8px 20px -4px rgba(0, 0, 0, 0.22);
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: pan-y;
+    cursor: ew-resize;
+}
+
+.kbuffer-convergence .threeway-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.kbuffer-convergence .layer-left {
+    clip-path: polygon(0% 0%, 33.33% 0%, 33.33% 100%, 0% 100%);
+}
+
+.kbuffer-convergence .layer-middle {
+    clip-path: polygon(33.33% 0%, 66.67% 0%, 66.67% 100%, 33.33% 100%);
+}
+
+.kbuffer-convergence .layer-right {
+    clip-path: polygon(66.67% 0%, 100% 0%, 100% 100%, 66.67% 100%);
+}
+
+.kbuffer-convergence .threeway-layer img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.kbuffer-convergence .threeway-divider {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 10px;
+    margin-left: -5px;
+    z-index: 30;
+    cursor: ew-resize;
+}
+
+.kbuffer-convergence .divider-1 {
+    left: 33.33%;
+}
+
+.kbuffer-convergence .divider-2 {
+    left: 66.67%;
+}
+
+.kbuffer-convergence .divider-line {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: 2.5px;
+    transform: translateX(-50%);
+}
+
+.kbuffer-convergence .divider-1 .divider-line {
+    background: #2563eb;
+    box-shadow: 0 0 8px rgba(37, 99, 235, 0.7);
+}
+
+.kbuffer-convergence .divider-2 .divider-line {
+    background: #7c3aed;
+    box-shadow: 0 0 8px rgba(124, 58, 237, 0.7);
+}
+
+.kbuffer-convergence .divider-handle {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: #ffffff;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    touch-action: none;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.kbuffer-convergence .divider-1 .divider-handle {
+    border: 2px solid #2563eb;
+    color: #2563eb;
+}
+
+.kbuffer-convergence .divider-2 .divider-handle {
+    border: 2px solid #7c3aed;
+    color: #7c3aed;
+}
+
+.kbuffer-convergence .threeway-divider:hover .divider-handle,
+.kbuffer-convergence .threeway-divider.is-dragging .divider-handle {
+    transform: translate(-50%, -50%) scale(1.15);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+}
+
+.kbuffer-convergence .threeway-badge {
+    position: absolute;
+    top: 10px;
+    z-index: 20;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 4px 9px;
+    border-radius: 6px;
+    background: rgba(15, 23, 42, 0.82);
+    color: #ffffff;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35);
+    transition: opacity 0.2s ease;
+}
+
+.kbuffer-convergence .badge-left {
+    left: 10px;
+    border: 1.5px solid #3b82f6;
+}
+
+.kbuffer-convergence .badge-middle {
+    left: 50%;
+    transform: translateX(-50%);
+    border: 1.5px solid #10b981;
+    background: rgba(6, 78, 59, 0.85);
+}
+
+.kbuffer-convergence .badge-right {
+    right: 10px;
+    border: 1.5px solid #8b5cf6;
+}
+
+.kbuffer-convergence .badge-title {
+    font-size: 0.76rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.kbuffer-convergence .badge-psnr {
+    font-family: var(--kb-mono);
+    font-size: 0.66rem;
+    color: #cbd5e1;
+    white-space: nowrap;
+}
+
+.kbuffer-convergence .badge-middle .badge-psnr {
+    color: #a7f3d0;
+}
+
+/* ============================================================================================================
+   4-way ablation comparison
+   ============================================================================================================ */
+
+.kbuffer-ablation .scene-buttons {
+    margin-bottom: 1rem;
+}
+
+/* Mouse: press and drag anywhere. Touch: drag the handle or tap; vertical swipes scroll the page */
+.kbuffer-ablation .fourway-viewport {
+    position: relative;
+    width: 100%;
+    max-width: 780px;
+    margin: 0 auto;
+    aspect-ratio: 618 / 411;
+    overflow: hidden;
+    border-radius: 12px;
+    background: #090d16;
+    border: 1px solid var(--border-dark);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.18);
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: pan-y;
+    cursor: crosshair;
+}
+
+.kbuffer-ablation .fourway-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.kbuffer-ablation .fourway-layer img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+#kbuffer-fourwayLayerTL {
+    clip-path: polygon(0 0, 50% 0, 50% 50%, 0 50%);
+}
+
+#kbuffer-fourwayLayerTR {
+    clip-path: polygon(50% 0, 100% 0, 100% 50%, 50% 50%);
+}
+
+#kbuffer-fourwayLayerBL {
+    clip-path: polygon(0 50%, 50% 50%, 50% 100%, 0 100%);
+}
+
+#kbuffer-fourwayLayerBR {
+    clip-path: polygon(50% 50%, 100% 50%, 100% 100%, 50% 100%);
+}
+
+.kbuffer-ablation .fourway-divider-v,
+.kbuffer-ablation .fourway-divider-h {
+    position: absolute;
+    background: rgba(255, 255, 255, 0.95);
+    box-shadow: 0 0 6px rgba(0, 0, 0, 0.7);
+    z-index: 20;
+    pointer-events: none;
+}
+
+.kbuffer-ablation .fourway-divider-v {
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: 2px;
+    transform: translateX(-50%);
+}
+
+.kbuffer-ablation .fourway-divider-h {
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: 2px;
+    transform: translateY(-50%);
+}
+
+.kbuffer-ablation .fourway-handle {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: #ffffff;
+    border: 2.5px solid var(--viridis-teal);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+    z-index: 30;
+    transform: translate(-50%, -50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: move;
+    color: var(--viridis-teal);
+    font-size: 0.9rem;
+    touch-action: none;
+    transition: transform 0.1s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
+.kbuffer-ablation .fourway-handle:hover,
+.kbuffer-ablation .fourway-handle.dragging {
+    transform: translate(-50%, -50%) scale(1.15);
+    box-shadow: 0 6px 22px rgba(0, 0, 0, 0.6);
+    background: #f0fdfa;
+}
+
+.kbuffer-ablation .fourway-badge {
+    position: absolute;
+    z-index: 25;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    background: rgba(15, 23, 42, 0.82);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    padding: 5px 8px;
+    color: #ffffff;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+.kbuffer-ablation .badge-tl {
+    top: 10px;
+    left: 10px;
+}
+
+.kbuffer-ablation .badge-tr {
+    top: 10px;
+    right: 10px;
+    align-items: flex-end;
+}
+
+.kbuffer-ablation .badge-bl {
+    bottom: 10px;
+    left: 10px;
+}
+
+.kbuffer-ablation .badge-br {
+    bottom: 10px;
+    right: 10px;
+    align-items: flex-end;
+}
+
+.kbuffer-ablation .badge-br.highlight-ours {
+    background: rgba(6, 78, 59, 0.88);
+    border-color: rgba(52, 211, 153, 0.6);
+}
+
+.kbuffer-ablation .fourway-badge-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.kbuffer-ablation .badge-tr .fourway-badge-tags,
+.kbuffer-ablation .badge-br .fourway-badge-tags {
+    justify-content: flex-end;
+}
+
+.kbuffer-ablation .fourway-tag {
+    font-size: 0.6rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    padding: 1px 5px;
+    border-radius: 4px;
+    white-space: nowrap;
+}
+
+.kbuffer-ablation .tag-v0 {
+    background: rgba(148, 163, 184, 0.28);
+    color: #cbd5e1;
+}
+
+.kbuffer-ablation .tag-v1 {
+    background: rgba(59, 130, 246, 0.32);
+    color: #93c5fd;
+}
+
+.kbuffer-ablation .tag-stoch {
+    background: rgba(239, 68, 68, 0.32);
+    color: #fca5a5;
+}
+
+.kbuffer-ablation .tag-kbuf {
+    background: rgba(20, 184, 166, 0.32);
+    color: #5eead4;
+}
+
+.kbuffer-ablation .tag-ours {
+    background: #059669;
+    color: #ffffff;
+}
+
+.kbuffer-ablation .fourway-badge-psnr {
+    font-family: var(--kb-mono);
+    font-size: 0.82rem;
+    font-weight: 800;
+    color: #38bdf8;
+}
+
+.kbuffer-ablation .badge-br.highlight-ours .fourway-badge-psnr {
+    color: #34d399;
+}
+
+/* ============================================================================================================
+   Narrower screens
+   ============================================================================================================ */
+
+/* Below the desktop breakpoint the content column gets wider again (full width), so the side-by-side layouts
+   fit down to about 900px */
+@media screen and (max-width: 899.98px) {
+    .kbuffer-convergence .threeway-grid,
+    .kbuffer-explorer .explorer-top {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+@media screen and (max-width: 768px) {
+    .kbuffer-widget .widget-card {
+        padding: 12px;
+    }
+
+    .kbuffer-toy .toy-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .kbuffer-explorer .floating-loupe {
+        width: 100px;
+        height: 100px;
+    }
+
+    /* Frame slider on its own line, so it stays usable */
+    .kbuffer-explorer .playback-row {
+        flex-wrap: wrap;
+    }
+
+    .kbuffer-explorer .frame-slider {
+        order: 1;
+        flex-basis: 100%;
+    }
+
+    .kbuffer-explorer .frame-badge {
+        margin-left: auto;
+    }
+
+    .kbuffer-explorer .view-row .button-17,
+    .kbuffer-explorer .view-row .button-17-selected {
+        height: 40px;
+        padding: 2px 14px;
+        font-size: 15px;
+    }
+
+    /* Neighborhood panels on top of each other, so the weight badges stay readable */
+    .kbuffer-explorer .neighborhood-container {
+        flex-direction: column;
+    }
+
+    .kbuffer-explorer .nh-panel {
+        width: 100%;
+        max-width: 200px;
+    }
+
+    .kbuffer-explorer .nh-transition {
+        flex-direction: row;
+        gap: 8px;
+    }
+
+    .kbuffer-explorer .nh-transition svg {
+        transform: rotate(90deg);
+    }
+
+    .kbuffer-explorer .nh-transition-caption br {
+        display: none;
+    }
+
+    /* Computation rows stacked: label, inputs, result */
+    .kbuffer-explorer .compute-row {
+        flex-direction: column;
+    }
+
+    .kbuffer-explorer .row-side-label {
+        width: auto;
+        align-self: flex-start;
+        padding: 3px 10px;
+    }
+
+    .kbuffer-explorer .row-side-label span {
+        writing-mode: horizontal-tb;
+        transform: none;
+    }
+
+    .kbuffer-explorer .row-side-label-spacer {
+        display: none;
+    }
+
+    .kbuffer-explorer .upstream-flow {
+        flex-direction: column;
+    }
+
+    .kbuffer-explorer .sample-card,
+    .kbuffer-explorer .sample-eval-note {
+        align-self: stretch;
+        max-width: none;
+    }
+
+    .kbuffer-explorer .row-result {
+        width: auto;
+    }
+
+    .kbuffer-explorer .vertical-op-row {
+        justify-content: center;
+    }
+
+    /* Slots in a 2x2 grid with the operators kept: #0 × #1, then ×, then #2 × #3, then = */
+    .kbuffer-explorer .slots-flow {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+        align-items: center;
+        gap: 4px 6px;
+    }
+
+    .kbuffer-explorer .slots-flow > :nth-child(4),
+    .kbuffer-explorer .slots-flow > :nth-child(8) {
+        grid-column: 1 / -1;
+        justify-self: center;
+        line-height: 1;
+    }
+
+    .kbuffer-explorer .pixel-status {
+        position: static;
+        margin-bottom: 6px;
+    }
+
+    .kbuffer-explorer .pixel-status:empty {
+        display: none;
+    }
+
+    .kbuffer-convergence .threeway-badge {
+        top: 6px;
+        padding: 3px 6px;
+    }
+
+    .kbuffer-convergence .badge-left {
+        left: 6px;
+    }
+
+    .kbuffer-convergence .badge-right {
+        right: 6px;
+    }
+
+    .kbuffer-convergence .badge-title {
+        font-size: 0.66rem;
+    }
+
+    .kbuffer-convergence .badge-psnr {
+        display: none;
+    }
+
+    .kbuffer-ablation .fourway-badge {
+        padding: 3px 5px;
+        max-width: 46%;
+    }
+
+    .kbuffer-ablation .badge-tl,
+    .kbuffer-ablation .badge-tr {
+        top: 6px;
+    }
+
+    .kbuffer-ablation .badge-bl,
+    .kbuffer-ablation .badge-br {
+        bottom: 6px;
+    }
+
+    .kbuffer-ablation .badge-tl,
+    .kbuffer-ablation .badge-bl {
+        left: 6px;
+    }
+
+    .kbuffer-ablation .badge-tr,
+    .kbuffer-ablation .badge-br {
+        right: 6px;
+    }
+
+    .kbuffer-ablation .fourway-tag {
+        font-size: 0.52rem;
+    }
+
+    .kbuffer-ablation .fourway-badge-psnr {
+        font-size: 0.72rem;
+    }
+
+    .kbuffer-ablation .fourway-handle {
+        width: 40px;
+        height: 40px;
+    }
+}
