@@ -2,10 +2,10 @@
 // 16-bit and 8-bit quantizations, so that both backends render the same image.
 //
 // Differences forced by WebGL 2 (no compute shaders, no storage buffers):
-// - The preprocessing runs in the vertex shader of the rasterization (per quad corner); culled Gaussians become
-//   degenerate quads instead of being left out of a compacted list.
-// - The rasterization writes the surviving Gaussian's conic and center per pixel to an extra target, which replaces
-//   the per-Gaussian buffer the WebGPU reuse pass reads.
+// - The preprocessing runs as a fragment pass, one pixel per Gaussian, into two RGBA32UI textures, which the
+//   rasterization and the reuse pass read by Gaussian id (where WebGPU uses a storage buffer). Instead of a compacted
+//   list of visible Gaussians, both passes cover the runs of chunks that the CPU finds in the view frustum (webgl.js);
+//   Gaussians culled within them become degenerate quads.
 // - Reuse and temporal accumulation run in one full-screen fragment pass; neighbors come from texel fetches instead of
 //   workgroup memory, and the K-buffer lives in two RGBA32UI textures per parity.
 // - Images are stored with rows from top to bottom as in WebGPU (the rasterization flips y, the display flips back),
@@ -48,18 +48,19 @@ vec4 unpack4x8(uint v) {
 `;
 
 // ---------------------------------------------------------------------------------------------------------------------
-// 1. Rasterization with the preprocessing in the vertex shader
+// 1. Preprocessing, one pixel per Gaussian (texel (i % width, i / width) as in the splat textures): decode, cull,
+//    project, evaluate color (shaders.js, PREPROCESS). Two uvec4 per Gaussian, the layout of the WebGPU projected
+//    buffer: A = (ndc.x, ndc.y, ndc.z as f32 bits, color), B = (basis 1, basis 2, conic xy, conic z as f16 pairs).
+//    Culled Gaussians get ndc.z = 2, outside the depth range.
 // ---------------------------------------------------------------------------------------------------------------------
 
-export const RASTER_VS = HEADER + /* glsl */ `
+export const PREPROCESS_FS = HEADER + /* glsl */ `
 uniform usampler2D splatsA;   // words 0-3 of the 7 per Gaussian (layout in shaders.js, DECODE_PACKED)
 uniform usampler2D splatsB;   // words 4-6
 uniform sampler2D chunks;     // 3 texels (12 floats) per chunk of 256: position min, max, log-scale min, max
 
-flat out uint vColor;
-flat out uint vId;
-flat out uvec4 vGauss;        // conic (f16 x3), center in NDC (f32 x2)
-out vec2 vFragPos;
+layout(location = 0) out uvec4 outA;
+layout(location = 1) out uvec4 outB;
 
 const float SH_C1 = 0.4886025119029199;
 const float SQRT8 = 2.8284271247461903;
@@ -67,7 +68,6 @@ const float FRUSTUM_DILATION = 0.2;
 
 float byteOf(uint w, uint b) { return float((w >> (8u * b)) & 255u); }
 float shCoef(uint w, uint b) { return (byteOf(w, b) - 128.0) * frame.shScale; }
-vec2 f16(vec2 v) { return unpackHalf2x16(packHalf2x16(v)); }
 
 uint pack4x8(vec4 v) {
   uvec4 q = uvec4(floor(clamp(v, 0.0, 1.0) * 255.0 + 0.5));
@@ -81,17 +81,14 @@ vec4 chunkTexel(uint c, int k) {
 }
 
 void cull() {
-  gl_Position = vec4(0.0, 0.0, 2.0, 1.0);  // outside the depth range: no fragments
-  vColor = 0u;
-  vId = 0u;
-  vGauss = uvec4(0u);
-  vFragPos = vec2(0.0);
+  outA = uvec4(0u, 0u, floatBitsToUint(2.0), 0u);
+  outB = uvec4(0u);
 }
 
 void main() {
-  uint i = uint(gl_InstanceID);
-  int width = textureSize(splatsA, 0).x;
-  ivec2 tc = ivec2(gl_InstanceID % width, gl_InstanceID / width);
+  ivec2 tc = ivec2(gl_FragCoord.xy);
+  uint i = uint(tc.y * textureSize(splatsA, 0).x + tc.x);
+  if (i >= frame.splatCount) { cull(); return; }
   uvec4 wa = texelFetch(splatsA, tc, 0);
   uvec4 wb = texelFetch(splatsB, tc, 0);
   uint w0 = wa.x; uint w1 = wa.y; uint w2 = wa.z; uint w3 = wa.w;
@@ -161,8 +158,8 @@ void main() {
   float e1len = length(e1);
   e1 = e1len > 1e-12 ? e1 / e1len : vec2(1.0, 0.0);
   vec2 e2 = vec2(e1.y, -e1.x);
-  vec2 basis1 = f16(e1 * min(SQRT8 * sqrt(l1), 2048.0));  // stored as f16 in WebGPU
-  vec2 basis2 = f16(e2 * min(SQRT8 * sqrt(l2), 2048.0));
+  vec2 basis1 = e1 * min(SQRT8 * sqrt(l1), 2048.0);
+  vec2 basis2 = e2 * min(SQRT8 * sqrt(l2), 2048.0);
   vec3 conic = vec3(d, -b, a) / det;
 
   // Color: stored base color plus degree-1 SH in the view direction, packed to 8 bits like the reference
@@ -172,15 +169,48 @@ void main() {
   vec3 ndc = clip.xyz / clip.w;
   if (ndc.z < 0.0) { cull(); return; }  // WebGPU clips depths below 0 (the quad has the center's depth throughout)
 
+  outA = uvec4(floatBitsToUint(ndc.x), floatBitsToUint(ndc.y), floatBitsToUint(ndc.z), pack4x8(vec4(rgb, opacity)));
+  outB = uvec4(packHalf2x16(basis1), packHalf2x16(basis2), packHalf2x16(conic.xy), packHalf2x16(vec2(conic.z, 0.0)));
+}
+`;
+
+// ---------------------------------------------------------------------------------------------------------------------
+// 2. Stochastic rasterization: one quad per Gaussian from the preprocessed data; a fragment survives if its threshold is
+//    below its opacity, and the depth test keeps the closest surviving one
+// ---------------------------------------------------------------------------------------------------------------------
+
+export const RASTER_VS = HEADER + /* glsl */ `
+uniform usampler2D projA;             // the preprocessed data, see PREPROCESS_FS
+uniform usampler2D projB;
+uniform uint firstInstance;           // index of the draw's first Gaussian
+
+flat out uint vColor;
+flat out uint vId;
+out vec2 vFragPos;
+
+void main() {
+  uint id = firstInstance + uint(gl_InstanceID);
+  int width = textureSize(projA, 0).x;
+  ivec2 tc = ivec2(int(id) % width, int(id) / width);
+  uvec4 a = texelFetch(projA, tc, 0);
+  uvec4 b = texelFetch(projB, tc, 0);
+  float ndcZ = uintBitsToFloat(a.z);
+  if (ndcZ > 1.0) {  // culled: outside the depth range, no fragments
+    gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
+    vColor = 0u;
+    vId = 0u;
+    vFragPos = vec2(0.0);
+    return;
+  }
+  vec2 ndc = uintBitsToFloat(a.xy);
   vec2 corner = vec2(float(gl_VertexID & 1) * 2.0 - 1.0, float(gl_VertexID >> 1) * 2.0 - 1.0);
-  vec2 offsetPx = corner.x * basis1 + corner.y * basis2;
+  vec2 offsetPx = corner.x * unpackHalf2x16(b.x) + corner.y * unpackHalf2x16(b.y);
   vec2 p = vec2(ndc.x + offsetPx.x * 2.0 / frame.viewport.x, ndc.y - offsetPx.y * 2.0 / frame.viewport.y);
   // Rows from top to bottom as in WebGPU (y flipped), depth in [0, 1] as in WebGPU
-  gl_Position = vec4(p.x, -p.y, ndc.z * 2.0 - 1.0, 1.0);
-  vFragPos = corner * SQRT8;
-  vColor = pack4x8(vec4(rgb, opacity));
-  vId = i;
-  vGauss = uvec4(packHalf2x16(conic.xy), packHalf2x16(vec2(conic.z, 0.0)), floatBitsToUint(ndc.x), floatBitsToUint(ndc.y));
+  gl_Position = vec4(p.x, -p.y, ndcZ * 2.0 - 1.0, 1.0);
+  vFragPos = corner * 2.8284271247461903;
+  vColor = a.w;
+  vId = id;
 }
 `;
 
@@ -189,12 +219,10 @@ uniform sampler3D stbn;
 
 flat in uint vColor;
 flat in uint vId;
-flat in uvec4 vGauss;
 in vec2 vFragPos;
 
-layout(location = 0) out vec4 outColor;   // rgb, alpha: the Gaussian's opacity (for the reuse pass)
+layout(location = 0) out vec4 outColor;
 layout(location = 1) out uint outId;
-layout(location = 2) out uvec4 outGauss;
 
 // Per-primitive spatio-temporal blue noise (random.h of the reference): R2 offsets into the 128x128x64 volume,
 // Cranley-Patterson rotation per 64-frame cycle
@@ -227,14 +255,13 @@ void main() {
     float u = (frame.flags & FLAG_WHITE_NOISE) != 0u ? whiteThreshold(pix, vId) : stbnThreshold(pix, vId);
     if (!(u < opacity)) { discard; }
   }
-  outColor = c;
+  outColor = vec4(c.rgb, 1.0);
   outId = vId;
-  outGauss = vGauss;
 }
 `;
 
 // ---------------------------------------------------------------------------------------------------------------------
-// 2. Spatial reuse with the K-buffer, temporal accumulation and the rest average, per pixel (shaders.js, REUSE)
+// 3. Spatial reuse with the K-buffer, temporal accumulation and the rest average, per pixel (shaders.js, REUSE)
 // ---------------------------------------------------------------------------------------------------------------------
 
 export const FULLSCREEN_VS = /* glsl */ `#version 300 es
@@ -247,10 +274,11 @@ void main() {
 `;
 
 export const REUSE_FS = HEADER + /* glsl */ `
-uniform sampler2D colorTex;    // rgb, alpha: the Gaussian's opacity
+uniform sampler2D colorTex;
 uniform usampler2D idTex;
 uniform sampler2D depthTex;
-uniform usampler2D gaussTex;   // conic (f16 x3), center in NDC (f32 x2)
+uniform usampler2D projA;      // the preprocessed data (PREPROCESS_FS): center in NDC, color
+uniform usampler2D projB;      // extent basis, conic
 uniform usampler2D kInA;       // K-buffer entries 0 and 1: (id, data, id, data); bits 30-31 of id 0: write index
 uniform usampler2D kInB;       // entries 2 and 3
 uniform sampler2D histTex;     // rgb: previous output, a: accumulated mass (bilinear)
@@ -280,13 +308,17 @@ struct G2D { vec3 conic; vec2 center; float depth; float opacity; };
 
 // The surviving Gaussian at pixel p, quantized like the WebGPU workgroup memory
 G2D gaussAt(ivec2 p) {
-  if (texelFetch(idTex, p, 0).r == NO_SPLAT) { return G2D(vec3(0.0), tileOriginF, 0.0, 0.0); }
-  uvec4 q = texelFetch(gaussTex, p, 0);
-  vec2 ndc = uintBitsToFloat(q.zw);
+  uint id = texelFetch(idTex, p, 0).r;
+  if (id == NO_SPLAT) { return G2D(vec3(0.0), tileOriginF, 0.0, 0.0); }
+  int width = textureSize(projA, 0).x;
+  ivec2 tc = ivec2(int(id) % width, int(id) / width);
+  uvec4 a = texelFetch(projA, tc, 0);
+  uvec4 b = texelFetch(projB, tc, 0);
+  vec2 ndc = uintBitsToFloat(a.xy);
   vec2 screen = vec2((ndc.x + 1.0) * 0.5 * frame.viewport.x, (1.0 - ndc.y) * 0.5 * frame.viewport.y);
   vec2 rel = unpackHalf2x16(packHalf2x16(screen - tileOriginF));
-  return G2D(vec3(unpackHalf2x16(q.x), unpackHalf2x16(q.y).x), rel + tileOriginF, f16(texelFetch(depthTex, p, 0).r),
-             texelFetch(colorTex, p, 0).a);
+  return G2D(vec3(unpackHalf2x16(b.z), unpackHalf2x16(b.w).x), rel + tileOriginF, f16(texelFetch(depthTex, p, 0).r),
+             float(a.w >> 24u) / 255.0);
 }
 
 float evalGauss(G2D g, vec2 pixel) {
@@ -529,7 +561,7 @@ void main() {
 `;
 
 // ---------------------------------------------------------------------------------------------------------------------
-// 3. Display: draws the output texture to the canvas (rows flipped back to the bottom-up default framebuffer)
+// 4. Display: draws the output texture to the canvas (rows flipped back to the bottom-up default framebuffer)
 // ---------------------------------------------------------------------------------------------------------------------
 
 export const DISPLAY_FS = /* glsl */ `#version 300 es

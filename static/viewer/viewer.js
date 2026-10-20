@@ -23,6 +23,7 @@ const MODELS = {
 };
 const SCENE_CACHE_SIZE = 2;  // decoded scenes kept, so that switching back and forth needs no download
 const BACKEND_KEY = 'steadysplats-viewer-backend';  // 'webgl' after WebGPU stalled or crashed in this browser
+const PANEL_KEY = 'steadysplats-viewer-panel';      // 'open' or 'closed': the controls as the viewer left them
 const STALL_MS = 5000;      // a WebGPU frame unfinished for this long counts as a stall
 const MAX_IN_FLIGHT = 2;    // WebGPU frames queued at most, so that a slow GPU cannot pile up work
 const STBN_URL = 'static/stbn/stbn_scalar.js';
@@ -492,7 +493,7 @@ function hints(issues) {
 }
 
 // The page elements viewer.js needs: an outdated or cached viewer.html lacks some of them
-const REQUIRED_IDS = ['viewer-canvas', 'scene-buttons', 'model-hint', 'render-scale', 'view-prev', 'view-next', 'converge', 'method-hint', 'stat-backend',
+const REQUIRED_IDS = ['viewer-canvas', 'panel-open', 'panel-close', 'fullscreen', 'scene-buttons', 'model-hint', 'render-scale', 'view-prev', 'view-next', 'converge', 'method-hint', 'stat-backend',
     'stat-fps', 'stat-gpu', 'stat-res', 'stat-count', 'stat-rest', 'backend-note', 'loading', 'loading-label',
     'loading-fill', 'error', 'fallback'];
 
@@ -757,6 +758,41 @@ async function main() {
         document.querySelectorAll('[data-noise]').forEach((x) => x.classList.toggle('active', x === b));
     }));
     $('render-scale').addEventListener('change', (e) => { renderScale = Number(e.target.value); });
+
+    // Touch screens: the gestures instead of mouse and keys
+    if (matchMedia("(pointer: coarse)").matches && $("help")) {
+        $("help").textContent = "Drag to orbit, pinch to zoom, drag with two fingers to pan, double-tap to reset.";
+    }
+
+    // Controls panel: collapses to a menu button (remembered); closed at first on small screens
+    const panel = document.querySelector('.panel');
+    function setPanel(open, remember = true) {
+        panel.hidden = !open;
+        $('panel-open').hidden = open;
+        if (remember) { try { localStorage.setItem(PANEL_KEY, open ? 'open' : 'closed'); } catch { /* not remembered */ } }
+    }
+    let panelState = null;
+    try { panelState = localStorage.getItem(PANEL_KEY); } catch { /* storage unavailable */ }
+    setPanel(panelState ? panelState === 'open' : !matchMedia('(max-width: 700px), (max-height: 500px)').matches, false);
+    $('panel-open').addEventListener('click', () => setPanel(true));
+    $('panel-close').addEventListener('click', () => setPanel(false));
+
+    // Fullscreen (hides the browser's bars on phones), where the browser allows it for the page
+    const root = document.documentElement;
+    const fullscreenElement = () => document.fullscreenElement || document.webkitFullscreenElement;
+    if (!(document.fullscreenEnabled || document.webkitFullscreenEnabled)) $('fullscreen').hidden = true;
+    $('fullscreen').addEventListener('click', () => {
+        if (fullscreenElement()) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+        else (root.requestFullscreen || root.webkitRequestFullscreen).call(root);
+    });
+    const updateFullscreen = () => {
+        const on = !!fullscreenElement();
+        $('fullscreen').classList.toggle('active', on);
+        $('fullscreen').setAttribute('aria-label', on ? 'Leave fullscreen' : 'Fullscreen');
+        $('fullscreen').title = on ? 'Leave fullscreen' : 'Fullscreen';
+    };
+    document.addEventListener('fullscreenchange', updateFullscreen);
+    document.addEventListener('webkitfullscreenchange', updateFullscreen);
     $('converge').addEventListener('change', (e) => { renderer.converge = e.target.checked; renderer.restFrames = 0; });
     $('view-prev').addEventListener('click', () => renderer.scene && setView(viewIndex - 1));
     $('view-next').addEventListener('click', () => renderer.scene && setView(viewIndex + 1));

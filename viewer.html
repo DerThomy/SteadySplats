@@ -2,7 +2,10 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#000000">
     <title>SteadySplats Viewer</title>
     <meta name="description" content="Interactive WebGPU viewer for SteadySplats: stochastic rendering of 3D Gaussians at one sample per pixel with spatial and temporal resampling.">
     <link rel="icon" href="./static/images/favicon.svg" type="image/svg+xml">
@@ -42,10 +45,14 @@
 
         .panel {
             position: fixed;
-            top: 12px;
-            left: 12px;
+            top: max(12px, env(safe-area-inset-top));
+            left: max(12px, env(safe-area-inset-left));
             width: 300px;
             max-width: calc(100vw - 24px);
+            max-height: calc(100vh - 24px);
+            max-height: calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+            overflow-y: auto;
+            overscroll-behavior: contain;
             padding: 14px 16px;
             box-sizing: border-box;
             background: var(--panel);
@@ -54,6 +61,74 @@
             backdrop-filter: blur(6px);
             font-size: 13px;
             line-height: 1.45;
+        }
+
+        .panel[hidden],
+        .icon-button[hidden] {
+            display: none;
+        }
+
+        .panel-head {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        /* Round buttons over the scene: open the controls, fullscreen */
+        .icon-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
+            padding: 0;
+            background: var(--panel);
+            color: var(--text);
+            border: 1px solid var(--panel-border);
+            border-radius: 10px;
+            backdrop-filter: blur(6px);
+            cursor: pointer;
+        }
+
+        .icon-button svg {
+            width: 20px;
+            height: 20px;
+        }
+
+        .icon-button:focus-visible {
+            outline: 2px solid #5eead4;
+            outline-offset: 1px;
+        }
+
+        .panel .icon-button {
+            flex: none;
+            width: 32px;
+            height: 32px;
+            margin: -4px -6px 0 0;
+            background: transparent;
+            border-color: transparent;
+        }
+
+        #panel-open {
+            position: fixed;
+            top: max(12px, env(safe-area-inset-top));
+            left: max(12px, env(safe-area-inset-left));
+        }
+
+        #fullscreen {
+            position: fixed;
+            top: max(12px, env(safe-area-inset-top));
+            right: max(12px, env(safe-area-inset-right));
+        }
+
+        #fullscreen .exit,
+        #fullscreen.active .enter {
+            display: none;
+        }
+
+        #fullscreen.active .exit {
+            display: block;
         }
 
         .panel h1 {
@@ -171,6 +246,8 @@
             top: 50%;
             transform: translate(-50%, -50%);
             width: min(360px, calc(100vw - 32px));
+            max-height: calc(100dvh - 32px);
+            overflow-y: auto;
             padding: 18px 20px;
             box-sizing: border-box;
             background: var(--panel);
@@ -229,8 +306,29 @@
 <body>
     <canvas id="viewer-canvas"></canvas>
 
+    <button class="icon-button" id="panel-open" aria-label="Show the controls" title="Show the controls" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <path d="M4 6h16M4 12h16M4 18h16"/>
+        </svg>
+    </button>
+    <button class="icon-button" id="fullscreen" aria-label="Fullscreen" title="Fullscreen">
+        <svg class="enter" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/>
+        </svg>
+        <svg class="exit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5"/>
+        </svg>
+    </button>
+
     <div class="panel">
-        <h1><a href="./">SteadySplats</a></h1>
+        <div class="panel-head">
+            <h1><a href="./">SteadySplats</a></h1>
+            <button class="icon-button" id="panel-close" aria-label="Hide the controls" title="Hide the controls">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                    <path d="M6 6l12 12M18 6L6 18"/>
+                </svg>
+            </button>
+        </div>
         <p class="subtitle">Stochastic rendering at 1 sample per pixel, in your browser</p>
 
         <div class="group">
@@ -288,7 +386,7 @@
         </dl>
         <p class="note" id="backend-note" hidden></p>
 
-        <p class="help">Drag to orbit, right-drag or Shift-drag to pan, scroll to zoom, WASD/QE to move, double-click to reset.</p>
+        <p class="help" id="help">Drag to orbit, right-drag or Shift-drag to pan, scroll to zoom, WASD/QE to move, double-click to reset.</p>
     </div>
 
     <div class="overlay" id="loading">
