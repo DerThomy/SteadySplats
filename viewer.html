@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SteadySplats Viewer</title>
+    <meta name="description" content="Interactive WebGPU viewer for SteadySplats: stochastic rendering of 3D Gaussians at one sample per pixel with spatial and temporal resampling.">
+    <link rel="icon" href="./static/images/favicon.svg" type="image/svg+xml">
+    <link rel="icon" href="./static/images/favicon-32.png" sizes="32x32" type="image/png">
+    <style>
+        :root {
+            --panel: rgba(15, 23, 42, 0.82);
+            --panel-border: rgba(148, 163, 184, 0.25);
+            --text: #e2e8f0;
+            --muted: #94a3b8;
+            --accent: #14b8a6;
+            --accent-text: #042f2e;
+        }
+
+        html, body {
+            margin: 0;
+            height: 100%;
+            overflow: hidden;
+            background: #000000;
+            color: var(--text);
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        }
+
+        #viewer-canvas {
+            position: fixed;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            display: block;
+            touch-action: none;
+            cursor: grab;
+        }
+
+        #viewer-canvas:active {
+            cursor: grabbing;
+        }
+
+        .panel {
+            position: fixed;
+            top: 12px;
+            left: 12px;
+            width: 300px;
+            max-width: calc(100vw - 24px);
+            padding: 14px 16px;
+            box-sizing: border-box;
+            background: var(--panel);
+            border: 1px solid var(--panel-border);
+            border-radius: 12px;
+            backdrop-filter: blur(6px);
+            font-size: 13px;
+            line-height: 1.45;
+        }
+
+        .panel h1 {
+            margin: 0 0 2px;
+            font-size: 17px;
+            font-weight: 650;
+        }
+
+        .panel h1 a {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .subtitle {
+            margin: 0 0 12px;
+            color: var(--muted);
+        }
+
+        .group {
+            margin-top: 12px;
+        }
+
+        .group-label {
+            margin-bottom: 5px;
+            color: var(--muted);
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+
+        .buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+        }
+
+        .buttons button,
+        .panel select {
+            padding: 4px 9px;
+            background: rgba(51, 65, 85, 0.7);
+            color: var(--text);
+            border: 1px solid var(--panel-border);
+            border-radius: 6px;
+            font: inherit;
+            cursor: pointer;
+        }
+
+        .buttons button.active {
+            background: var(--accent);
+            color: var(--accent-text);
+            border-color: var(--accent);
+            font-weight: 600;
+        }
+
+        .buttons button:focus-visible,
+        .panel select:focus-visible {
+            outline: 2px solid #5eead4;
+            outline-offset: 1px;
+        }
+
+        .check {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            margin-top: 8px;
+            cursor: pointer;
+        }
+
+        .check input {
+            margin: 0;
+            accent-color: var(--accent);
+        }
+
+        .check:has(input:disabled) {
+            color: var(--muted);
+            cursor: default;
+        }
+
+        .nowrap {
+            white-space: nowrap;
+        }
+
+        .hint {
+            margin: 6px 0 0;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 1px 10px;
+            margin-top: 12px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .stats dt {
+            color: var(--muted);
+        }
+
+        .stats dd {
+            margin: 0;
+        }
+
+        .help {
+            margin: 12px 0 0;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .overlay {
+            position: fixed;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            width: min(360px, calc(100vw - 32px));
+            padding: 18px 20px;
+            box-sizing: border-box;
+            background: var(--panel);
+            border: 1px solid var(--panel-border);
+            border-radius: 12px;
+            text-align: center;
+        }
+
+        .overlay[hidden] {
+            display: none;
+        }
+
+        .progress {
+            height: 6px;
+            margin-top: 10px;
+            overflow: hidden;
+            background: rgba(51, 65, 85, 0.8);
+            border-radius: 999px;
+        }
+
+        .progress div {
+            width: 0;
+            height: 100%;
+            background: var(--accent);
+            transition: width 0.15s;
+        }
+
+        .overlay a {
+            color: #5eead4;
+        }
+
+        .fallback {
+            width: min(880px, calc(100vw - 32px));
+        }
+
+        .fallback video {
+            display: block;
+            width: 100%;
+            height: auto;
+            margin: 12px 0;
+            border-radius: 8px;
+        }
+
+        .note {
+            margin: 10px 0 0;
+            color: #fcd34d;
+            font-size: 12px;
+        }
+
+        .note a {
+            color: #5eead4;
+        }
+    </style>
+    <script type="module" src="./static/viewer/viewer.js"></script>
+</head>
+<body>
+    <canvas id="viewer-canvas"></canvas>
+
+    <div class="panel">
+        <h1><a href="./">SteadySplats</a></h1>
+        <p class="subtitle">Stochastic rendering at 1 sample per pixel, in your browser</p>
+
+        <div class="group">
+            <div class="group-label">Scene</div>
+            <div class="buttons" id="scene-buttons"></div>
+        </div>
+
+        <div class="group">
+            <div class="group-label">Model training</div>
+            <div class="buttons">
+                <button data-model="lvar1" class="active">Variance loss (&lambda;<sub>var</sub> = 1)</button>
+                <button data-model="lvar0">Without (&lambda;<sub>var</sub> = 0)</button>
+            </div>
+            <p class="hint" id="model-hint"></p>
+        </div>
+
+        <div class="group">
+            <div class="group-label">Method (1 sample per pixel)</div>
+            <div class="buttons">
+                <button data-toggle="spatial" class="active" aria-pressed="true">Spatial reuse</button>
+                <button data-toggle="temporal" class="active" aria-pressed="true">Temporal accumulation</button>
+            </div>
+            <p class="hint" id="method-hint">SteadySplats: spatial and temporal reuse, as in the paper.</p>
+            <label class="check"><input type="checkbox" id="converge" checked> Converge while the camera rests</label>
+        </div>
+
+        <div class="group">
+            <div class="group-label">Sampling noise</div>
+            <div class="buttons">
+                <button data-noise="blue" class="active">Blue (STBN)</button>
+                <button data-noise="white">White</button>
+            </div>
+        </div>
+
+        <div class="group">
+            <div class="group-label">View</div>
+            <div class="buttons">
+                <button id="view-prev">◀ Camera</button>
+                <button id="view-next">Camera ▶</button>
+                <select id="render-scale" aria-label="Render scale">
+                    <option value="1" selected>Full resolution</option>
+                    <option value="0.75">75%</option>
+                    <option value="0.5">50%</option>
+                </select>
+            </div>
+        </div>
+
+        <dl class="stats">
+            <dt>Renderer</dt><dd id="stat-backend">–</dd>
+            <dt>FPS</dt><dd id="stat-fps">–</dd>
+            <dt>GPU</dt><dd id="stat-gpu">–</dd>
+            <dt>Resolution</dt><dd id="stat-res">–</dd>
+            <dt>Gaussians</dt><dd id="stat-count">–</dd>
+            <dt>Averaged</dt><dd id="stat-rest">–</dd>
+        </dl>
+        <p class="note" id="backend-note" hidden></p>
+
+        <p class="help">Drag to orbit, right-drag or Shift-drag to pan, scroll to zoom, WASD/QE to move, double-click to reset.</p>
+    </div>
+
+    <div class="overlay" id="loading">
+        <div id="loading-label">Loading...</div>
+        <div class="progress"><div id="loading-fill"></div></div>
+    </div>
+
+    <div class="overlay" id="error" hidden>
+        <p></p>
+        <a href="./">Back to the project page</a>
+    </div>
+
+    <div class="overlay fallback" id="fallback" hidden>
+        <p><strong>This browser cannot run the interactive viewer.</strong> <span class="reasons"></span></p>
+        <video src="./static/video/teaser.mp4" poster="./static/images/teaser_poster.jpg" muted loop playsinline></video>
+        <p>Garden at 1 sample per pixel: Gaussian Point Splatting, ours and StochasticSplats. The
+            <a href="./#temporal">comparisons under camera motion</a> on the project page show more scenes and methods.</p>
+    </div>
+</body>
+</html>
