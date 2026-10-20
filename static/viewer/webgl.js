@@ -91,7 +91,7 @@ export class WebGLRenderer extends RendererBase {
 
     constructor(gl, stbnData) {
         super();
-        this.backend = 'WebGL 2 (fallback)';
+        this.backend = 'WebGL 2';
         this.maxPixels = 1920 * 1200;  // render resolution cap (124 bytes per pixel)
         this.gl = gl;
         this.preprocessProgram = link(gl, FULLSCREEN_VS, PREPROCESS_FS);

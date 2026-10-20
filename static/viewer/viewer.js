@@ -15,6 +15,7 @@ const SCENES = [
     { id: 'garden', name: 'Garden' },
 ];
 const SCENE_DIR = 'static/viewer/scenes/';
+const DEFAULT_SCENE = 'garden';
 // The same scenes trained with and without our variance loss, with the same number of Gaussians: <scene>.ssplat and
 // <scene>-lvar0.ssplat
 const MODELS = {
@@ -456,10 +457,12 @@ class WebGPURenderer extends RendererBase {
 // =====================================================================================================================
 
 const $ = (id) => document.getElementById(id);
+let activeRenderer = null;  // the renderer in use: losses of a replaced one are ignored
 
 // WebGPU if it works, else the WebGL 2 fallback (?backend=webgl forces it); without either, the reasons
 async function createRenderer(canvas, stbn) {
     const issues = [];
+    let webgpuFailed = false;
     const backend = params.get('backend');
     if (backend === 'webgpu') storeBackend(null);  // retry WebGPU after an earlier stall or crash
     const why = { stall: 'WebGPU stopped responding on this GPU.', lost: 'The WebGPU device was lost.' }[params.get('why')];
@@ -469,16 +472,24 @@ async function createRenderer(canvas, stbn) {
         issues.push('WebGPU stalled or crashed in this browser before.');
     } else {
         const r = await createWebGPURenderer(canvas, stbn);
-        if (typeof r !== 'string') return { renderer: r, issues };
+        if (typeof r !== 'string') return { renderer: r, issues, webgpuFailed: false };
         issues.push(r);
+        webgpuFailed = true;
     }
     const r = WebGLRenderer.create(canvas, stbn, backend === 'webgl' && !params.get('why'));
     if (typeof r !== 'string') {
-        canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); showError('The WebGL context was lost. Reload the page.'); });
-        return { renderer: r, issues };
+        watchContextLoss(canvas, r);
+        return { renderer: r, issues, webgpuFailed };
     }
     issues.push(r);
-    return { renderer: null, issues };
+    return { renderer: null, issues, webgpuFailed };
+}
+
+function watchContextLoss(canvas, r) {
+    canvas.addEventListener('webglcontextlost', (e) => {
+        e.preventDefault();
+        if (r === activeRenderer) showError('The WebGL context was lost. Reload the page.');
+    });
 }
 
 // What the user can do: enable WebGPU on Linux (off by default for most GPUs so far), or let the browser use the GPU
@@ -493,7 +504,7 @@ function hints(issues) {
 }
 
 // The page elements viewer.js needs: an outdated or cached viewer.html lacks some of them
-const REQUIRED_IDS = ['viewer-canvas', 'panel-open', 'panel-close', 'fullscreen', 'scene-buttons', 'model-hint', 'render-scale', 'view-prev', 'view-next', 'converge', 'method-hint', 'stat-backend',
+const REQUIRED_IDS = ['viewer-canvas', 'panel-open', 'panel-close', 'fullscreen', 'backend-group', 'scene-buttons', 'model-hint', 'render-scale', 'view-prev', 'view-next', 'converge', 'method-hint', 'stat-backend',
     'stat-fps', 'stat-gpu', 'stat-res', 'stat-count', 'stat-rest', 'backend-note', 'loading', 'loading-label',
     'loading-fill', 'error', 'fallback'];
 
@@ -524,15 +535,15 @@ async function createWebGPURenderer(canvas, stbn) {
     } catch (err) {
         return `WebGPU could not create a device (${err.message}).`;
     }
-    device.lost.then((lost) => {
-        console.warn('WebGPU device lost:', lost.reason, lost.message);
-        if (lost.reason !== 'destroyed') switchToWebGL('lost');
-    });
     const context = canvas.getContext('webgpu');
     const format = navigator.gpu.getPreferredCanvasFormat();
     context.configure({ device, format, alphaMode: 'opaque' });
     const renderer = new WebGPURenderer(device, context, format, stbn);
     renderer.adapterInfo = [info.vendor, info.architecture, info.description].filter(Boolean).join(' ');
+    device.lost.then((lost) => {
+        console.warn('WebGPU device lost:', lost.reason, lost.message);
+        if (lost.reason !== 'destroyed' && renderer === activeRenderer) switchToWebGL('lost');
+    });
     return renderer;
 }
 
@@ -569,11 +580,14 @@ async function main() {
         else document.body.textContent = message;
         return;
     }
-    const canvas = $('viewer-canvas');
-    const { renderer, issues } = await createRenderer(canvas, await loadStbn());
+    let canvas = $('viewer-canvas');
+    const stbn = await loadStbn();
+    let { renderer, issues, webgpuFailed } = await createRenderer(canvas, stbn);
     if (!renderer) { showFallback(issues); return; }
-    $('stat-backend').textContent = renderer.backend;
-    if (renderer.adapterInfo) $('stat-backend').title = renderer.adapterInfo;
+    activeRenderer = renderer;
+    showBackend(issues.length > 0);
+    // WebGPU / WebGL 2 switch wherever WebGPU works (or was only skipped)
+    if (navigator.gpu && !webgpuFailed) $('backend-group').hidden = false;
     if (issues.length) {
         // Running on the fallback: say why, and offer WebGPU again if it only failed at run time
         const note = $('backend-note');
@@ -590,9 +604,61 @@ async function main() {
         note.hidden = false;
     }
 
+    function showBackend(fallback) {
+        $('stat-backend').textContent = renderer.backend + (fallback ? ' (fallback)' : '');
+        $('stat-backend').title = renderer.adapterInfo || '';
+        const kind = renderer instanceof WebGLRenderer ? 'webgl' : 'webgpu';
+        document.querySelectorAll('[data-backend]').forEach((b) => b.classList.toggle('active', b.dataset.backend === kind));
+    }
+
+    // Swaps the renderer in place, keeping the scene, the view and the settings. A canvas holds one kind of context
+    // only, so the new renderer gets a fresh canvas.
+    async function switchBackend(kind) {
+        if (kind === (renderer instanceof WebGLRenderer ? 'webgl' : 'webgpu')) return;
+        const fresh = canvas.cloneNode(false);
+        const r = kind === 'webgl' ? WebGLRenderer.create(fresh, stbn, true) : await createWebGPURenderer(fresh, stbn);
+        if (typeof r === 'string') {
+            $('backend-note').textContent = r;
+            $('backend-note').hidden = false;
+            return;
+        }
+        const old = renderer;
+        try {
+            if (old.scene) r.setScene(old.scene);
+        } catch (err) {
+            $('backend-note').textContent = `${r.backend} cannot show this scene (${err.message}).`;
+            $('backend-note').hidden = false;
+            return;
+        }
+        if (kind === 'webgl') watchContextLoss(fresh, r);
+        r.flags = old.flags;
+        r.converge = old.converge;
+        r.restLimit = old.restLimit;
+        if (TEST) r.maxInFlight = Infinity;
+        canvas.replaceWith(fresh);
+        canvas = fresh;
+        attachInput(canvas);
+        renderer = r;
+        activeRenderer = r;
+        // Release the old GPU resources
+        if (old.device) old.device.destroy();
+        else old.gl.getExtension('WEBGL_lose_context')?.loseContext();
+        if (kind === 'webgpu') storeBackend(null);
+        $('backend-note').hidden = true;
+        showBackend(false);
+        // Keep the choice in the address, without the reasons of an automatic fallback
+        const next = new URLSearchParams(location.search);
+        next.delete('why');
+        if (kind === 'webgl') next.set('backend', 'webgl'); else next.delete('backend');
+        const query = next.toString();
+        history.replaceState(null, '', `${location.pathname}${query ? `?${query}` : ''}`);
+    }
+    document.querySelectorAll('[data-backend]').forEach((b) => b.addEventListener('click', () => switchBackend(b.dataset.backend)));
+
     const camera = new OrbitCamera();
     let renderScale = 1;
-    let sceneIndex = Math.max(0, SCENES.findIndex((s) => s.id === params.get('scene')));
+    let sceneIndex = SCENES.findIndex((s) => s.id === params.get('scene'));
+    if (sceneIndex < 0) sceneIndex = SCENES.findIndex((s) => s.id === DEFAULT_SCENE);
     let model = MODELS[params.get('model')] ? params.get('model') : 'lvar1';
     const sceneCache = new Map();
     let viewIndex = 0;
@@ -667,47 +733,50 @@ async function main() {
     const pointers = new Map();
     let pinchDistance = 0;
     let pinchCenter = null;
-    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
-    canvas.addEventListener('pointerdown', (e) => {
-        canvas.setPointerCapture(e.pointerId);
-        pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, button: e.button, shift: e.shiftKey });
-        if (pointers.size === 2) {
-            const [a, b] = [...pointers.values()];
-            pinchDistance = Math.hypot(a.x - b.x, a.y - b.y);
-            pinchCenter = [(a.x + b.x) / 2, (a.y + b.y) / 2];
-        }
-    });
-    canvas.addEventListener('pointermove', (e) => {
-        const p = pointers.get(e.pointerId);
-        if (!p || !renderer.scene) return;
-        const dpr = (window.devicePixelRatio || 1) * renderScale;
-        const dx = e.clientX - p.x, dy = e.clientY - p.y;
-        p.x = e.clientX; p.y = e.clientY;
-        if (pointers.size === 2) {
-            const [a, b] = [...pointers.values()];
-            const dist = Math.hypot(a.x - b.x, a.y - b.y);
-            const c = [(a.x + b.x) / 2, (a.y + b.y) / 2];
-            if (pinchDistance > 0) camera.dolly(pinchDistance / Math.max(dist, 1));
-            if (pinchCenter) camera.pan((c[0] - pinchCenter[0]) * dpr, (c[1] - pinchCenter[1]) * dpr, renderer.size[1]);
-            pinchDistance = dist;
-            pinchCenter = c;
-        } else if (p.button === 2 || p.button === 1 || p.shift) {
-            camera.pan(dx * dpr, dy * dpr, renderer.size[1]);
-        } else {
-            camera.orbit(dx, dy);
-        }
-    });
-    const endPointer = (e) => {
-        pointers.delete(e.pointerId);
-        if (pointers.size < 2) { pinchDistance = 0; pinchCenter = null; }
-    };
-    canvas.addEventListener('pointerup', endPointer);
-    canvas.addEventListener('pointercancel', endPointer);
-    canvas.addEventListener('wheel', (e) => {
-        e.preventDefault();
-        camera.dolly(Math.exp(e.deltaY * 0.001));
-    }, { passive: false });
-    canvas.addEventListener('dblclick', () => { if (renderer.scene) setView(viewIndex); });
+    function attachInput(el) {
+        el.addEventListener('contextmenu', (e) => e.preventDefault());
+        el.addEventListener('pointerdown', (e) => {
+            el.setPointerCapture(e.pointerId);
+            pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, button: e.button, shift: e.shiftKey });
+            if (pointers.size === 2) {
+                const [a, b] = [...pointers.values()];
+                pinchDistance = Math.hypot(a.x - b.x, a.y - b.y);
+                pinchCenter = [(a.x + b.x) / 2, (a.y + b.y) / 2];
+            }
+        });
+        el.addEventListener('pointermove', (e) => {
+            const p = pointers.get(e.pointerId);
+            if (!p || !renderer.scene) return;
+            const dpr = (window.devicePixelRatio || 1) * renderScale;
+            const dx = e.clientX - p.x, dy = e.clientY - p.y;
+            p.x = e.clientX; p.y = e.clientY;
+            if (pointers.size === 2) {
+                const [a, b] = [...pointers.values()];
+                const dist = Math.hypot(a.x - b.x, a.y - b.y);
+                const c = [(a.x + b.x) / 2, (a.y + b.y) / 2];
+                if (pinchDistance > 0) camera.dolly(pinchDistance / Math.max(dist, 1));
+                if (pinchCenter) camera.pan((c[0] - pinchCenter[0]) * dpr, (c[1] - pinchCenter[1]) * dpr, renderer.size[1]);
+                pinchDistance = dist;
+                pinchCenter = c;
+            } else if (p.button === 2 || p.button === 1 || p.shift) {
+                camera.pan(dx * dpr, dy * dpr, renderer.size[1]);
+            } else {
+                camera.orbit(dx, dy);
+            }
+        });
+        const endPointer = (e) => {
+            pointers.delete(e.pointerId);
+            if (pointers.size < 2) { pinchDistance = 0; pinchCenter = null; }
+        };
+        el.addEventListener('pointerup', endPointer);
+        el.addEventListener('pointercancel', endPointer);
+        el.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            camera.dolly(Math.exp(e.deltaY * 0.001));
+        }, { passive: false });
+        el.addEventListener('dblclick', () => { if (renderer.scene) setView(viewIndex); });
+    }
+    attachInput(canvas);
     const keys = new Set();
     window.addEventListener('keydown', (e) => { if (!e.target.closest('input, select, button')) keys.add(e.key.toLowerCase()); });
     window.addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
@@ -836,7 +905,9 @@ async function main() {
         renderer.restLimit = Infinity;
         renderer.maxInFlight = Infinity;
         window.viewerTest = {
-            renderer, camera,
+            get renderer() { return renderer; },
+            camera,
+            switchBackend,
             loadScene: async (id, m) => { if (m) model = m; return selectScene(SCENES.findIndex((s) => s.id === id)); },
             // pose: { position, rotation (camera-to-world rows), fx, fy, width, height }
             renderPose(pose, frameIdx, flags) {
