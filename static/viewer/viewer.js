@@ -13,14 +13,16 @@ const SCENES = [
     { id: 'room', name: 'Room' },
     { id: 'bonsai', name: 'Bonsai' },
     { id: 'garden', name: 'Garden' },
+    { id: 'stump', name: 'Stump' },
+    { id: 'bicycle', name: 'Bicycle' },
 ];
 const SCENE_DIR = 'static/viewer/scenes/';
 const DEFAULT_SCENE = 'garden';
-// The same scenes trained with and without our variance loss, with the same number of Gaussians: <scene>.ssplat and
-// <scene>-lvar0.ssplat
+// FasterGS models: <scene>.ssplat with our variance loss and pruned to about half the Gaussians, <scene>-lvar0.ssplat
+// the baseline without the variance loss and without pruning
 const MODELS = {
-    lvar1: { suffix: '', hint: 'Trained with our variance loss (\u03bbvar\u00a0=\u00a01).' },
-    lvar0: { suffix: '-lvar0', hint: 'The same training without the variance loss (\u03bbvar\u00a0=\u00a00) and with as many Gaussians: noisier at 1 sample per pixel.' },
+    lvar1: { suffix: '', hint: 'Trained with our variance loss (\u03bbvar\u00a0=\u00a01) and pruned to about half the Gaussians of the baseline.' },
+    lvar0: { suffix: '-lvar0', hint: 'Baseline: the same training without the variance loss (\u03bbvar\u00a0=\u00a00) and without pruning. It has about twice the Gaussians and is noisier at 1 sample per pixel.' },
 };
 const SCENE_CACHE_SIZE = 2;  // decoded scenes kept, so that switching back and forth needs no download
 const BACKEND_KEY = 'steadysplats-viewer-backend';  // 'webgl' after WebGPU stalled or crashed in this browser
@@ -871,6 +873,7 @@ async function main() {
     // ---------------------------------------------------------------------------------------------------------------
     let last = performance.now();
     let fpsFrames = 0, fpsTime = 0;
+    let gpuSamples = [], lastGpu = null;
     function loop(now) {
         const dt = Math.min(0.1, (now - last) / 1000);
         last = now;
@@ -884,6 +887,7 @@ async function main() {
             const [fx, fy] = focal();
             if (renderer.render(camera.axes(), fx, fy)) fpsFrames++;
             if (renderer.stalled?.(now)) { switchToWebGL('stall'); return; }
+            if (renderer.gpuTimes && renderer.gpuTimes !== lastGpu) gpuSamples.push(lastGpu = renderer.gpuTimes);
             fpsTime += dt;
             if (fpsTime > 0.5) {
                 const idle = renderer.converge && (renderer.flags & FLAG_TEMPORAL) && renderer.restFrames > renderer.restLimit;
@@ -891,8 +895,10 @@ async function main() {
                 const n = renderer.restFrames;
                 $('stat-rest').textContent = !renderer.converge || !(renderer.flags & FLAG_TEMPORAL) ? 'off'
                     : n === 0 ? 'moving' : n > renderer.restLimit ? `converged (${renderer.restLimit} frames)` : `${n} frames`;
-                const g = renderer.gpuTimes;
+                // The median frame of the last half second: a single timer query can still catch a wait of the GPU
+                const g = gpuSamples.length ? gpuSamples.sort((a, b) => a.total - b.total)[gpuSamples.length >> 1] : renderer.gpuTimes;
                 $('stat-gpu').textContent = g ? `${g.total.toFixed(2)} ms (raster ${g.raster.toFixed(2)}, reuse ${g.reuse.toFixed(2)})` : 'n/a';
+                gpuSamples = [];
                 fpsFrames = 0;
                 fpsTime = 0;
             }

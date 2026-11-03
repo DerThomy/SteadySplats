@@ -182,14 +182,18 @@ void main() {
 export const RASTER_VS = HEADER + /* glsl */ `
 uniform usampler2D projA;             // the preprocessed data, see PREPROCESS_FS
 uniform usampler2D projB;
-uniform uint firstInstance;           // index of the draw's first Gaussian
+uniform usampler2D chunkList;         // indices of the visible chunks (webgl.js), 256 instances each
 
 flat out uint vColor;
 flat out uint vId;
 out vec2 vFragPos;
 
 void main() {
-  uint id = firstInstance + uint(gl_InstanceID);
+  // Ids past the last Gaussian (in the last chunk) are culled by the preprocessing
+  int slot = gl_InstanceID >> 8;
+  int listWidth = textureSize(chunkList, 0).x;
+  uint chunk = texelFetch(chunkList, ivec2(slot % listWidth, slot / listWidth), 0).r;
+  uint id = chunk * 256u + uint(gl_InstanceID & 255);
   int width = textureSize(projA, 0).x;
   ivec2 tc = ivec2(int(id) % width, int(id) / width);
   uvec4 a = texelFetch(projA, tc, 0);

@@ -6,14 +6,14 @@ import { DISPLAY_FS, FULLSCREEN_VS, PREPROCESS_FS, RASTER_FS, RASTER_VS, REUSE_F
 const SPLAT_TEXTURE_WIDTH = 4096;   // Gaussians per row of the data textures (splats and preprocessed)
 const CHUNK_TEXTURE_WIDTH = 1536;   // 512 chunks of 3 texels per row
 const CHUNK = 256;                  // Gaussians per chunk (convert_ply.js)
-const MAX_RANGES = 256;             // draws in the rasterization at most: runs of visible chunks closer than a gap are merged
+const CHUNK_LIST_WIDTH = 4096;      // visible chunk indices per row of the chunk list texture
 const MAX_PREPROCESS_RANGES = 8;    // draws of the preprocessing at most (whole texture rows each)
 const FRUSTUM_DILATION = 0.2;       // as in the shaders' culling of single Gaussians
 
-// Texture units: the preprocessing samples 0-2, the rasterization 3, 7 and 13, the reuse pass 4-11 and 13, the display
-// 12, so that no pass samples a texture it renders to
+// Texture units: the preprocessing samples 0-2, the rasterization 3, 7, 13 and 14, the reuse pass 4-11 and 13, the
+// display 12, so that no pass samples a texture it renders to
 const UNIT = { splatsA: 0, splatsB: 1, chunks: 2, stbn: 3, colorTex: 4, idTex: 5, depthTex: 6, projA: 7, kInA: 8,
-    kInB: 9, histTex: 10, restIn: 11, image: 12, projB: 13 };
+    kInB: 9, histTex: 10, restIn: 11, image: 12, projB: 13, chunkList: 14 };
 
 function compile(gl, type, source) {
     const shader = gl.createShader(type);
@@ -96,7 +96,6 @@ export class WebGLRenderer extends RendererBase {
         this.gl = gl;
         this.preprocessProgram = link(gl, FULLSCREEN_VS, PREPROCESS_FS);
         this.rasterProgram = link(gl, RASTER_VS, RASTER_FS);
-        this.firstInstanceLoc = gl.getUniformLocation(this.rasterProgram, 'firstInstance');
         this.reuseProgram = link(gl, FULLSCREEN_VS, REUSE_FS);
         this.displayProgram = link(gl, FULLSCREEN_VS, DISPLAY_FS);
         this.vao = gl.createVertexArray();  // no attributes: every pass reads textures
@@ -115,7 +114,7 @@ export class WebGLRenderer extends RendererBase {
     setScene(scene) {
         const gl = this.gl;
         if (scene.header.precision === 'float') throw new Error('the WebGL 2 fallback renders packed scenes only');
-        for (const t of [this.splatsA, this.splatsB, this.chunks]) if (t) gl.deleteTexture(t);
+        for (const t of [this.splatsA, this.splatsB, this.chunks, this.chunkList]) if (t) gl.deleteTexture(t);
         for (const t of [this.projA, this.projB]) if (t) gl.deleteTexture(t);
         if (this.preprocessFbo) gl.deleteFramebuffer(this.preprocessFbo);
         const n = scene.header.count, words = scene.words;
@@ -143,6 +142,10 @@ export class WebGLRenderer extends RendererBase {
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         this.scene = scene;
         this.chunkCount = Math.ceil(n / CHUNK);
+        // Indices of the visible chunks, written every frame: the rasterization draws them with a single call
+        const lh = Math.ceil(this.chunkCount / CHUNK_LIST_WIDTH);
+        this.chunkList = texture(gl, gl.TEXTURE_2D, gl.R32UI, CHUNK_LIST_WIDTH, lh, gl.NEAREST);
+        this.chunkListData = new Uint32Array(CHUNK_LIST_WIDTH * lh);
         if (this.size[0]) this.createTargets(this.size[0], this.size[1]);
         this.resetPending = true;
     }
@@ -183,10 +186,9 @@ export class WebGLRenderer extends RendererBase {
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     }
 
-    // Runs [first, count] of Gaussians in the chunks whose bounding box (of the centers) is not completely outside a
-    // plane of the dilated frustum: the shaders would cull every Gaussian of the other chunks. WebGL 2 cannot compact
-    // the visible Gaussians on the GPU, and drawing culled ones as degenerate quads costs nearly as much as drawing
-    // visible ones.
+    // 1 for the chunks whose bounding box (of the centers) is not completely outside a plane of the dilated frustum:
+    // the shaders would cull every Gaussian of the other chunks. WebGL 2 cannot compact the visible Gaussians on the
+    // GPU, and drawing culled ones as degenerate quads costs nearly as much as drawing visible ones.
     visibleChunks(viewProj) {
         const m = viewProj, c = this.scene.chunks, n = this.scene.header.count, d = 1 + FRUSTUM_DILATION;
         // Clip-space conditions a * clip >= 0 as world-space planes (transpose(viewProj) * a)
@@ -229,6 +231,13 @@ export class WebGLRenderer extends RendererBase {
         gl.bindTexture(target, t);
     }
 
+    // Starts a timer query. The flush hands the commands before it to the GPU process first: without it, the commands of
+    // a timed pass often reached the GPU in two pieces, and the query counted the wait for the second (up to 7 ms)
+    beginTimer(query) {
+        this.gl.flush();
+        this.gl.beginQuery(this.timer.TIME_ELAPSED_EXT, query);
+    }
+
     // Renders a frame; returns false if there is nothing to render (converged at rest, see RendererBase.frameData)
     render(cam, fx, fy, toCanvas = true) {
         const gl = this.gl;
@@ -244,8 +253,10 @@ export class WebGLRenderer extends RendererBase {
         gl.disable(gl.CULL_FACE);
         const timing = this.timer && !this.queries ? [gl.createQuery(), gl.createQuery(), gl.createQuery()] : null;
         const visible = this.visibleChunks(this.prevViewProj);  // frameData() leaves this frame's view-projection there
-        const ranges = this.ranges(visible, MAX_RANGES);
-        this.drawnGaussians = ranges.reduce((s, r) => s + r[1], 0);
+        // The visible chunks in their stored order
+        const list = this.chunkListData;
+        let listed = 0;
+        for (let k = 0; k < this.chunkCount; k++) if (visible[k]) list[listed++] = k;
 
         // 1. Preprocessing, one pixel per Gaussian, over the texture rows of the visible chunks
         gl.bindFramebuffer(gl.FRAMEBUFFER, this.preprocessFbo);
@@ -253,7 +264,7 @@ export class WebGLRenderer extends RendererBase {
         this.bind(gl.TEXTURE_2D, UNIT.splatsA, this.splatsA);
         this.bind(gl.TEXTURE_2D, UNIT.splatsB, this.splatsB);
         this.bind(gl.TEXTURE_2D, UNIT.chunks, this.chunks);
-        if (timing) gl.beginQuery(this.timer.TIME_ELAPSED_EXT, timing[2]);
+        if (timing) this.beginTimer(timing[2]);
         for (const [first, count] of this.ranges(visible, MAX_PREPROCESS_RANGES)) {
             const y0 = Math.floor(first / SPLAT_TEXTURE_WIDTH), y1 = Math.ceil((first + count) / SPLAT_TEXTURE_WIDTH);
             gl.viewport(0, y0, SPLAT_TEXTURE_WIDTH, y1 - y0);
@@ -261,7 +272,8 @@ export class WebGLRenderer extends RendererBase {
         }
         if (timing) gl.endQuery(this.timer.TIME_ELAPSED_EXT);
 
-        // 2. Stochastic rasterization: a quad per Gaussian, the depth test keeps the closest surviving fragment
+        // 2. Stochastic rasterization: a quad per Gaussian, the depth test keeps the closest surviving fragment. One draw
+        // of 256 instances per listed chunk, instead of one draw per run of visible chunks (up to 256).
         gl.bindFramebuffer(gl.FRAMEBUFFER, this.rasterFbo);
         gl.viewport(0, 0, w, h);
         gl.clearBufferfv(gl.COLOR, 0, [0, 0, 0, 1]);
@@ -274,11 +286,13 @@ export class WebGLRenderer extends RendererBase {
         this.bind(gl.TEXTURE_3D, UNIT.stbn, this.stbn);
         this.bind(gl.TEXTURE_2D, UNIT.projA, this.projA);
         this.bind(gl.TEXTURE_2D, UNIT.projB, this.projB);
-        if (timing) gl.beginQuery(this.timer.TIME_ELAPSED_EXT, timing[0]);
-        for (const [first, count] of ranges) {
-            gl.uniform1ui(this.firstInstanceLoc, first);
-            gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, count);
+        this.bind(gl.TEXTURE_2D, UNIT.chunkList, this.chunkList);
+        if (listed) {
+            gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, CHUNK_LIST_WIDTH, Math.ceil(listed / CHUNK_LIST_WIDTH), gl.RED_INTEGER,
+                gl.UNSIGNED_INT, list);
         }
+        if (timing) this.beginTimer(timing[0]);
+        if (listed) gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, listed * CHUNK);
         if (timing) gl.endQuery(this.timer.TIME_ELAPSED_EXT);
         gl.disable(gl.DEPTH_TEST);
 
@@ -294,7 +308,7 @@ export class WebGLRenderer extends RendererBase {
         this.bind(gl.TEXTURE_2D, UNIT.kInB, this.kB[q]);
         this.bind(gl.TEXTURE_2D, UNIT.histTex, this.hist[q]);
         this.bind(gl.TEXTURE_2D, UNIT.restIn, this.rest[q]);
-        if (timing) gl.beginQuery(this.timer.TIME_ELAPSED_EXT, timing[1]);
+        if (timing) this.beginTimer(timing[1]);
         gl.drawArrays(gl.TRIANGLES, 0, 3);
         if (timing) gl.endQuery(this.timer.TIME_ELAPSED_EXT);
 
