@@ -552,6 +552,26 @@ element {
     background-color: #def4d4;
 }
 
+/* Main table: three datasets with four metrics each, separated by a vertical line */
+.results-table-wide {
+    font-size: 0.9rem;
+}
+
+.table.results-table-wide th,
+.table.results-table-wide td {
+    padding: 0.4em 0.5em;
+}
+
+/* Long method names ("Gaussian Point Splatting + Temporal") wrap so the table fits the desktop column */
+.table.results-table-wide td.has-text-left {
+    white-space: normal;
+    min-width: 9.5em;
+}
+
+.results-table .group-start {
+    border-left: 1px solid #b5b5b5;
+}
+
 .results-table tbody + tbody tr:first-child td {
     border-top: 2px solid #b5b5b5;
 }

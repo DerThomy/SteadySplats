@@ -1076,53 +1076,80 @@
                     <h2 class="title is-3">Results</h2>
                     <div class="content has-text-justified">
                         <p>
-                            We evaluate on 21 camera paths across 7 Mip-NeRF 360 scenes (3,152 frames) against sorted
-                            &alpha;-blending as ground truth, measuring image quality and temporal stability (tPSNR).
-                            The best value is shown in bold on dark green, the second best on light green.
+                            We evaluate on 33 camera paths across 11 scenes of Mip-NeRF 360, Tanks &amp; Temples and Deep
+                            Blending (4,465 frames) at 1 sample per pixel, against sorted &alpha;-blending as ground truth,
+                            measuring image quality and temporal stability (tPSNR). The baselines use their original
+                            implementations, without and with their own temporal accumulation (StochasticSplats: CMA,
+                            &tau;&nbsp;=&nbsp;0.20). <em>Ours</em> adds <span class="mathcal">L</span><sub>var</sub> and
+                            spatial reuse (K&nbsp;=&nbsp;4), <em>Ours + Temporal</em> our temporal reuse
+                            (<span style="text-decoration: overline;">&delta;</span>&nbsp;=&nbsp;0.7). The best value is
+                            shown in bold on dark green, the second best on light green.
                         </p>
                     </div>
 
                     <h3 class="title is-5 mt-5 mb-3">Camera Path Benchmark</h3>
                     <div class="table-container">
-                        <table class="table is-fullwidth results-table">
+                        <table class="table is-fullwidth results-table results-table-wide">
                             <thead>
                                 <tr>
                                     <th rowspan="2" class="has-text-left">Method</th>
-                                    <th rowspan="2">Avg. PSNR (dB) &uarr;</th>
-                                    <th rowspan="2">SSIM &uarr;</th>
-                                    <th rowspan="2">LPIPS &darr;</th>
-                                    <th rowspan="2">tPSNR (dB) &uarr;</th>
-                                    <th colspan="2">PSNR (dB) &uarr;</th>
+                                    <th colspan="4" class="group-start">Mip-NeRF 360</th>
+                                    <th colspan="4" class="group-start">Tanks &amp; Temples</th>
+                                    <th colspan="4" class="group-start">Deep Blending</th>
                                 </tr>
                                 <tr>
-                                    <th>Indoor</th>
-                                    <th>Outdoor</th>
+                                    <th class="group-start">PSNR &uarr;</th><th>SSIM &uarr;</th><th>LPIPS &darr;</th><th>tPSNR &uarr;</th>
+                                    <th class="group-start">PSNR &uarr;</th><th>SSIM &uarr;</th><th>LPIPS &darr;</th><th>tPSNR &uarr;</th>
+                                    <th class="group-start">PSNR &uarr;</th><th>SSIM &uarr;</th><th>LPIPS &darr;</th><th>tPSNR &uarr;</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <tr>
                                     <td class="has-text-left">StochasticSplats</td>
-                                    <td>18.336</td><td>0.293</td><td>0.667</td><td>15.235</td><td>19.562</td><td>16.701</td>
+                                    <td class="group-start">16.680</td><td>0.220</td><td>0.698</td><td>13.650</td>
+                                    <td class="group-start">13.252</td><td>0.131</td><td>0.757</td><td>10.222</td>
+                                    <td class="group-start">19.857</td><td>0.293</td><td>0.669</td><td>16.798</td>
                                 </tr>
                                 <tr>
                                     <td class="has-text-left">StochasticSplats + Temporal</td>
-                                    <td>21.954</td><td>0.552</td><td>0.524</td><td>19.450</td><td>23.313</td><td>20.141</td>
+                                    <td class="group-start">19.855</td><td>0.353</td><td>0.643</td><td>16.876</td>
+                                    <td class="group-start">15.508</td><td>0.202</td><td>0.725</td><td>12.537</td>
+                                    <td class="group-start">22.068</td><td>0.424</td><td>0.618</td><td>19.042</td>
+                                </tr>
+                                <tr>
+                                    <td class="has-text-left">Gaussian Point Splatting</td>
+                                    <td class="group-start">15.490</td><td>0.178</td><td>0.416</td><td>12.463</td>
+                                    <td class="group-start">11.755</td><td>0.091</td><td>0.424</td><td>8.770</td>
+                                    <td class="group-start">19.155</td><td>0.229</td><td>0.391</td><td>16.115</td>
+                                </tr>
+                                <tr>
+                                    <td class="has-text-left">Gaussian Point Splatting + Temporal</td>
+                                    <td class="group-start">20.637</td><td>0.347</td><td>0.429</td><td>17.886</td>
+                                    <td class="group-start">16.460</td><td>0.184</td><td>0.433</td><td>13.893</td>
+                                    <td class="group-start">24.692</td><td>0.455</td><td>0.402</td><td>21.778</td>
                                 </tr>
                                 <tr>
                                     <td class="has-text-left">Ours</td>
-                                    <td class="second">31.437</td><td class="second">0.845</td><td class="second">0.345</td>
-                                    <td class="second">28.410</td><td class="second">32.978</td><td class="second">29.381</td>
+                                    <td class="second group-start">31.437</td><td class="second">0.845</td><td class="second">0.345</td><td class="second">28.410</td>
+                                    <td class="second group-start">30.330</td><td class="second">0.817</td><td class="second">0.407</td><td class="second">27.338</td>
+                                    <td class="second group-start">35.853</td><td class="second">0.910</td><td class="second">0.369</td><td class="second">32.777</td>
                                 </tr>
                                 <tr>
                                     <td class="has-text-left"><strong>Ours + Temporal</strong></td>
-                                    <td class="best">35.085</td><td class="best">0.937</td><td class="best">0.209</td>
-                                    <td class="best">32.449</td><td class="best">37.161</td><td class="best">32.318</td>
+                                    <td class="best group-start">35.086</td><td class="best">0.937</td><td class="best">0.209</td><td class="best">32.449</td>
+                                    <td class="best group-start">33.255</td><td class="best">0.924</td><td class="best">0.270</td><td class="best">30.985</td>
+                                    <td class="best group-start">40.308</td><td class="best">0.970</td><td class="best">0.210</td><td class="best">37.572</td>
                                 </tr>
                             </tbody>
                         </table>
                     </div>
 
                     <h3 class="title is-5 mt-5 mb-3">Component Ablation</h3>
+                    <p class="mb-3">
+                        All 33 camera paths of the three datasets, rendered with our renderer and spatio-temporal blue
+                        noise. Spatial reuse uses K&nbsp;=&nbsp;4, temporal reuse EMA filtering with our soft history
+                        rejection at a fixed <span style="text-decoration: overline;">&delta;</span>&nbsp;=&nbsp;0.70.
+                    </p>
                     <div class="table-container">
                         <table class="table is-fullwidth results-table">
                             <thead>
@@ -1130,48 +1157,46 @@
                                     <th><span class="mathcal">L</span><sub>var</sub></th>
                                     <th>Spatial Reuse</th>
                                     <th>Temporal Reuse</th>
-                                    <th>tPSNR (dB) &uarr;</th>
+                                    <th>PSNR (dB) &uarr;</th>
                                     <th>SSIM &uarr;</th>
                                     <th>LPIPS &darr;</th>
-                                    <th>Avg. PSNR (dB) &uarr;</th>
+                                    <th>tPSNR (dB) &uarr;</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <tr>
                                     <td>&mdash;</td><td>&mdash;</td><td>&mdash;</td>
-                                    <td>15.235</td><td>0.293</td><td>0.667</td><td>18.336</td>
+                                    <td>16.711</td><td>0.212</td><td>0.722</td><td>13.600</td>
                                 </tr>
                                 <tr>
                                     <td>&mdash;</td><td>&check;</td><td>&mdash;</td>
-                                    <td>21.720</td><td>0.586</td><td>0.498</td><td>24.774</td>
+                                    <td>23.470</td><td>0.485</td><td>0.560</td><td>20.404</td>
                                 </tr>
                                 <tr>
                                     <td>&mdash;</td><td>&mdash;</td><td>&check;</td>
-                                    <td>22.204</td><td>0.619</td><td>0.522</td><td>25.227</td>
+                                    <td>23.590</td><td>0.502</td><td>0.599</td><td>20.593</td>
                                 </tr>
                                 <tr>
                                     <td>&mdash;</td><td>&check;</td><td>&check;</td>
-                                    <td>27.188</td><td>0.817</td><td>0.365</td><td>29.946</td>
+                                    <td>28.888</td><td>0.742</td><td>0.443</td><td>26.194</td>
                                 </tr>
                             </tbody>
                             <tbody>
                                 <tr>
                                     <td>&check;</td><td>&mdash;</td><td>&mdash;</td>
-                                    <td>22.423</td><td>0.613</td><td>0.525</td><td>25.561</td>
+                                    <td>26.013</td><td>0.623</td><td>0.538</td><td>22.859</td>
                                 </tr>
                                 <tr>
                                     <td>&check;</td><td>&check;</td><td>&mdash;</td>
-                                    <td>28.410</td><td>0.845</td><td class="second">0.345</td><td>31.437</td>
+                                    <td>32.038</td><td>0.852</td><td class="second">0.361</td><td>29.009</td>
                                 </tr>
                                 <tr>
                                     <td>&check;</td><td>&mdash;</td><td>&check;</td>
-                                    <td class="second">28.980</td><td class="second">0.863</td><td>0.357</td>
-                                    <td class="second">31.953</td>
+                                    <td class="second">32.397</td><td class="second">0.866</td><td>0.377</td><td class="second">29.424</td>
                                 </tr>
                                 <tr>
                                     <td>&check;</td><td>&check;</td><td>&check;</td>
-                                    <td class="best">32.449</td><td class="best">0.937</td><td class="best">0.209</td>
-                                    <td class="best">35.085</td>
+                                    <td class="best">35.702</td><td class="best">0.940</td><td class="best">0.220</td><td class="best">33.114</td>
                                 </tr>
                             </tbody>
                         </table>
