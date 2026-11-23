@@ -5,6 +5,7 @@
 //
 // Conventions: camera space as in COLMAP (x right, y down, z forward), pixel coordinates with y down, WebGPU clip space
 // (y up, depth in [0, 1]).
+import { QUAD_BATCH } from './common.js';
 
 const FRAME = /* wgsl */ `
 struct Frame {
@@ -100,7 +101,8 @@ struct Splat { center: vec3f, scale: vec3f, rotation: vec4f, opacity: f32, color
 ` + decode + /* wgsl */ `
 @group(0) @binding(3) var<storage, read_write> projected: array<vec4u>;  // 2 per Gaussian
 @group(0) @binding(4) var<storage, read_write> visible: array<u32>;
-@group(0) @binding(5) var<storage, read_write> drawArgs: array<atomic<u32>, 4>;
+// Indexed indirect draw arguments of the rasterization, then the number of visible Gaussians
+@group(0) @binding(5) var<storage, read_write> drawArgs: array<atomic<u32>, 6>;
 
 const SH_C1 = 0.4886025119029199;
 const SQRT8 = 2.8284271247461903;
@@ -165,7 +167,10 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   let ndc = clip.xyz / clip.w;
   projected[2u * i] = vec4u(bitcast<u32>(ndc.x), bitcast<u32>(ndc.y), bitcast<u32>(ndc.z), color);
   projected[2u * i + 1u] = vec4u(pack2x16float(basis1), pack2x16float(basis2), pack2x16float(conic.xy), pack2x16float(vec2f(conic.z, 0.0)));
-  visible[atomicAdd(&drawArgs[1], 1u)] = i;
+  // A raster instance per ${QUAD_BATCH} visible Gaussians
+  let slot = atomicAdd(&drawArgs[5], 1u);
+  visible[slot] = i;
+  if (slot % ${QUAD_BATCH}u == 0u) { atomicAdd(&drawArgs[1], 1u); }
 }
 `;
 
@@ -181,6 +186,7 @@ export const RASTER = FRAME + /* wgsl */ `
 @group(0) @binding(1) var<storage, read> projected: array<vec4u>;
 @group(0) @binding(2) var<storage, read> visible: array<u32>;
 @group(0) @binding(3) var stbn: texture_3d<f32>;
+@group(0) @binding(4) var<storage, read> drawArgs: array<u32, 6>;  // [5]: the number of visible Gaussians
 
 struct VSOut {
   @builtin(position) pos: vec4f,
@@ -191,12 +197,18 @@ struct VSOut {
 
 @vertex
 fn vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> VSOut {
-  let id = visible[ii];
+  // vi is the index (common.js quadIndices): quad, then corner
+  let slot = ii * ${QUAD_BATCH}u + (vi >> 2u);
+  var out: VSOut;
+  if (slot >= drawArgs[5]) {  // past the last visible Gaussian: outside the depth range, no fragments
+    out.pos = vec4f(0.0, 0.0, 2.0, 1.0);
+    return out;
+  }
+  let id = visible[slot];
   let p0 = projected[2u * id];
   let p1 = projected[2u * id + 1u];
-  let corner = vec2f(f32(vi & 1u) * 2.0 - 1.0, f32(vi >> 1u) * 2.0 - 1.0);
+  let corner = vec2f(f32(vi & 1u) * 2.0 - 1.0, f32((vi >> 1u) & 1u) * 2.0 - 1.0);
   let offsetPx = corner.x * unpack2x16float(p1.x) + corner.y * unpack2x16float(p1.y);
-  var out: VSOut;
   out.pos = vec4f(bitcast<f32>(p0.x) + offsetPx.x * 2.0 / frame.viewport.x,
                   bitcast<f32>(p0.y) - offsetPx.y * 2.0 / frame.viewport.y,
                   bitcast<f32>(p0.z), 1.0);

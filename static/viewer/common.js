@@ -6,6 +6,17 @@ export const FAR = 2000.0;
 export const REST_FRAMES_MAX = 1024;    // frames averaged while the camera rests; after that the viewer idles
 export const FLAG_SPATIAL = 1, FLAG_TEMPORAL = 2, FLAG_WHITE_NOISE = 4, FLAG_RESET = 8;
 export const K_EMPTY = [0x3fffffff, 0xffff0000];  // empty K-buffer entry (see shaders.js)
+// Gaussians per instance of the raster draws: an instance of 4 vertices per Gaussian leaves vertex hardware idle
+// (on an RTX 5090 the rasterization took up to 1.4x as long; a Galaxy S24 showed no difference)
+export const QUAD_BATCH = 256;
+
+// Index list of n quads, two triangles each; vertex 4q + c is corner c of quad q, (x, y) = (c & 1, c >> 1), the same
+// triangles as a 4-vertex triangle strip
+export function quadIndices(n) {
+    const idx = new Uint16Array(6 * n);
+    for (let q = 0; q < n; q++) idx.set([0, 1, 2, 2, 1, 3].map((c) => 4 * q + c), 6 * q);
+    return idx;
+}
 
 // =====================================================================================================================
 // Small vector and matrix helpers (column-major 4x4 matrices as Float32Array)

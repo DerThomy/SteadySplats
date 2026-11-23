@@ -3,8 +3,8 @@
 // fallback (webgl.js) where WebGPU is missing, or shows the project page's teaser video. Scenes are .ssplat files written
 // by convert_ply.js (notes folder, viewer-tools).
 import { PREPROCESS, PREPROCESS_FLOAT, RASTER, REUSE, DISPLAY } from './shaders.js';
-import { FLAG_SPATIAL, FLAG_TEMPORAL, FLAG_WHITE_NOISE, K_EMPTY, RendererBase, add, cross, dot, halfToFloat, normalize,
-    scale3, sub } from './common.js';
+import { FLAG_SPATIAL, FLAG_TEMPORAL, FLAG_WHITE_NOISE, K_EMPTY, QUAD_BATCH, RendererBase, add, cross, dot, halfToFloat,
+    normalize, quadIndices, scale3, sub } from './common.js';
 import { WebGLRenderer } from './webgl.js';
 
 const SCENES = [
@@ -218,7 +218,12 @@ class WebGPURenderer extends RendererBase {
         this.pending = [];  // submit times of frames the GPU has not finished
 
         this.frameBuffer = device.createBuffer({ size: 384, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
-        this.drawArgs = device.createBuffer({ size: 16, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.INDIRECT | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC });
+        // Indexed indirect arguments of the rasterization (an instance of QUAD_BATCH quads per started batch of visible
+        // Gaussians), then the number of visible Gaussians (shaders.js)
+        this.drawArgs = device.createBuffer({ size: 24, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.INDIRECT | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC });
+        const indices = quadIndices(QUAD_BATCH);
+        this.quadIndices = device.createBuffer({ size: indices.byteLength, usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST });
+        device.queue.writeBuffer(this.quadIndices, 0, indices);
         this.stbn = device.createTexture({ size: [128, 128, 64], dimension: '3d', format: 'r8unorm', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
         device.queue.writeTexture({ texture: this.stbn }, stbnData, { bytesPerRow: 128, rowsPerImage: 128 }, [128, 128, 64]);
         this.linear = device.createSampler({ magFilter: 'linear', minFilter: 'linear', addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge' });
@@ -233,7 +238,7 @@ class WebGPURenderer extends RendererBase {
             layout: 'auto',
             vertex: { module: raster, entryPoint: 'vs' },
             fragment: { module: raster, entryPoint: 'fs', targets: [{ format: 'rgba8unorm' }, { format: 'r32uint' }] },
-            primitive: { topology: 'triangle-strip', cullMode: 'none' },
+            primitive: { topology: 'triangle-list', cullMode: 'none' },
             depthStencil: { format: 'depth32float', depthWriteEnabled: true, depthCompare: 'less' },
         });
         this.reusePipeline = device.createComputePipeline({ layout: 'auto', compute: { module: module(REUSE), entryPoint: 'main' } });
@@ -284,6 +289,7 @@ class WebGPURenderer extends RendererBase {
                 { binding: 1, resource: { buffer: this.projected } },
                 { binding: 2, resource: { buffer: this.visible } },
                 { binding: 3, resource: this.stbn.createView() },
+                { binding: 4, resource: { buffer: this.drawArgs } },
             ],
         });
         if (this.size[0]) this.createTargets(this.size[0], this.size[1]);
@@ -345,7 +351,7 @@ class WebGPURenderer extends RendererBase {
         const frame = this.frameData(cam, fx, fy);
         if (!frame) return false;
         d.queue.writeBuffer(this.frameBuffer, 0, frame);
-        d.queue.writeBuffer(this.drawArgs, 0, new Uint32Array([4, 0, 0, 0]));
+        d.queue.writeBuffer(this.drawArgs, 0, new Uint32Array([6 * QUAD_BATCH, 0, 0, 0, 0, 0]));
         const enc = d.createCommandEncoder();
         const ts = (i) => (this.timing ? { querySet: this.querySet, beginningOfPassWriteIndex: i, endOfPassWriteIndex: i + 1 } : undefined);
 
@@ -365,7 +371,8 @@ class WebGPURenderer extends RendererBase {
         });
         rp.setPipeline(this.rasterPipeline);
         rp.setBindGroup(0, this.rasterGroup);
-        rp.drawIndirect(this.drawArgs, 0);
+        rp.setIndexBuffer(this.quadIndices, 'uint16');
+        rp.drawIndexedIndirect(this.drawArgs, 0);
         rp.end();
 
         const reuse = enc.beginComputePass({ timestampWrites: ts(4) });
@@ -442,12 +449,12 @@ class WebGPURenderer extends RendererBase {
     }
 
     async visibleCount() {
-        const buf = this.device.createBuffer({ size: 16, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+        const buf = this.device.createBuffer({ size: 24, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
         const enc = this.device.createCommandEncoder();
-        enc.copyBufferToBuffer(this.drawArgs, 0, buf, 0, 16);
+        enc.copyBufferToBuffer(this.drawArgs, 0, buf, 0, 24);
         this.device.queue.submit([enc.finish()]);
         await buf.mapAsync(GPUMapMode.READ);
-        const v = new Uint32Array(buf.getMappedRange())[1];
+        const v = new Uint32Array(buf.getMappedRange())[5];
         buf.unmap();
         buf.destroy();
         return v;
@@ -897,7 +904,10 @@ async function main() {
                     : n === 0 ? 'moving' : n > renderer.restLimit ? `converged (${renderer.restLimit} frames)` : `${n} frames`;
                 // The median frame of the last half second: a single timer query can still catch a wait of the GPU
                 const g = gpuSamples.length ? gpuSamples.sort((a, b) => a.total - b.total)[gpuSamples.length >> 1] : renderer.gpuTimes;
-                $('stat-gpu').textContent = g ? `${g.total.toFixed(2)} ms (raster ${g.raster.toFixed(2)}, reuse ${g.reuse.toFixed(2)})` : 'n/a';
+                // WebGL timer queries (renderer.timer) or WebGPU timestamps (renderer.timing); Chrome on a Galaxy S24 has neither
+                const timed = renderer.timer || renderer.timing;
+                $('stat-gpu').textContent = g ? `${g.total.toFixed(2)} ms (raster ${g.raster.toFixed(2)}, reuse ${g.reuse.toFixed(2)})`
+                    : timed ? 'n/a' : 'no GPU timer in this browser';
                 gpuSamples = [];
                 fpsFrames = 0;
                 fpsTime = 0;

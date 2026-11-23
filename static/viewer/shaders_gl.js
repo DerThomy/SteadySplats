@@ -182,18 +182,18 @@ void main() {
 export const RASTER_VS = HEADER + /* glsl */ `
 uniform usampler2D projA;             // the preprocessed data, see PREPROCESS_FS
 uniform usampler2D projB;
-uniform usampler2D chunkList;         // indices of the visible chunks (webgl.js), 256 instances each
+uniform usampler2D chunkList;         // indices of the visible chunks (webgl.js), one instance of 256 quads each
 
 flat out uint vColor;
 flat out uint vId;
 out vec2 vFragPos;
 
 void main() {
-  // Ids past the last Gaussian (in the last chunk) are culled by the preprocessing
-  int slot = gl_InstanceID >> 8;
+  // gl_VertexID is the index (common.js quadIndices): quad, then corner. Ids past the last Gaussian (in the last
+  // chunk) are culled by the preprocessing
   int listWidth = textureSize(chunkList, 0).x;
-  uint chunk = texelFetch(chunkList, ivec2(slot % listWidth, slot / listWidth), 0).r;
-  uint id = chunk * 256u + uint(gl_InstanceID & 255);
+  uint chunk = texelFetch(chunkList, ivec2(gl_InstanceID % listWidth, gl_InstanceID / listWidth), 0).r;
+  uint id = chunk * 256u + uint(gl_VertexID >> 2);
   int width = textureSize(projA, 0).x;
   ivec2 tc = ivec2(int(id) % width, int(id) / width);
   uvec4 a = texelFetch(projA, tc, 0);
@@ -207,7 +207,7 @@ void main() {
     return;
   }
   vec2 ndc = uintBitsToFloat(a.xy);
-  vec2 corner = vec2(float(gl_VertexID & 1) * 2.0 - 1.0, float(gl_VertexID >> 1) * 2.0 - 1.0);
+  vec2 corner = vec2(float(gl_VertexID & 1) * 2.0 - 1.0, float((gl_VertexID >> 1) & 1) * 2.0 - 1.0);
   vec2 offsetPx = corner.x * unpackHalf2x16(b.x) + corner.y * unpackHalf2x16(b.y);
   vec2 p = vec2(ndc.x + offsetPx.x * 2.0 / frame.viewport.x, ndc.y - offsetPx.y * 2.0 / frame.viewport.y);
   // Rows from top to bottom as in WebGPU (y flipped), depth in [0, 1] as in WebGPU
